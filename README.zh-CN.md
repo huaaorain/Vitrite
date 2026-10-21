@@ -12,7 +12,7 @@
 
 [English Documentation (英文文档)](README.md)
 
-[下载 0.1 版本](https://github.com/hua-ao-yu/Vitrite/releases/latest)
+[下载 0.1 版本](https://github.com/huaaorain/Vitrite/releases/latest)
 
 ## ✨ 现代化特性
 

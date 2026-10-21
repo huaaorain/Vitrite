@@ -12,7 +12,7 @@
 
 [中文文档 (Chinese Documentation)](README.zh-CN.md)
 
-[Download version 0.1](https://github.com/hua-ao-yu/Vitrite/releases/latest)
+[Download version 0.1](https://github.com/huaaorain/Vitrite/releases/latest)
 
 ## ✨ Modernization Features
 
