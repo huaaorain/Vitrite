@@ -244,12 +244,16 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Vitrite.c" />
+    <ClCompile Include="VitriteLibrary.c" />
     <ClCompile Include="VitriteReader.c" />
+    <ClCompile Include="VitriteUi.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h" />
     <ClInclude Include="Vitrite.h" />
+    <ClInclude Include="VitriteLibrary.h" />
     <ClInclude Include="VitriteReader.h" />
+    <ClInclude Include="VitriteUi.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Vitrite.rc" />

@@ -5,6 +5,7 @@
 #define IDD_ABOUT                       101
 #define IDD_MAIN                        101
 #define IDD_SETTINGS                    102
+#define IDD_BOOK_AUTHOR                 103
 #define IDI_ICON1                       105
 #define IDC_SETTINGS_HEADER             1100
 #define IDC_OPACITY_MODIFIERS           1101
@@ -14,6 +15,8 @@
 #define IDC_RESTORE_DEFAULTS            1105
 #define IDC_OPEN_ABOUT                  1106
 #define IDC_SETTINGS_SUBTITLE           1107
+#define IDC_BOOK_AUTHOR_TITLE           1200
+#define IDC_BOOK_AUTHOR_NAME            1201
 #define IDC_TEXT1                       1000
 #define IDC_TEXT2                       1001
 #define IDC_TEXT3                       1002
@@ -42,6 +45,7 @@
 #define IDS_MENU_TOPMOST                2017
 #define IDS_MENU_SETTINGS               2018
 #define IDS_MENU_READER                 2019
+#define IDS_MENU_LIBRARY                2020
 
 // Next default values for new objects
 // 

@@ -30,6 +30,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "resource.h"
 #include "vitrite.h"
 #include "VitriteReader.h"
+#include "VitriteLibrary.h"
+#include "VitriteUi.h"
 
 // Globals
 HINSTANCE  g_hInstance;
@@ -236,7 +238,7 @@ static void NotifyExistingVitriteInstance(HWND existing, LPCTSTR commandLine) {
 		data.lpData = path;
 		SendMessage(existing, WM_COPYDATA, 0, (LPARAM)&data);
 	} else {
-		PostMessage(existing, WM_COMMAND, MAKEWPARAM(IDM_READER, 0), 0);
+		PostMessage(existing, WM_COMMAND, MAKEWPARAM(IDM_LIBRARY, 0), 0);
 	}
 }
 
@@ -757,6 +759,7 @@ BOOL ShowPopupMenu(HWND hWnd, POINT pOint) {
 	TCHAR msgCreatePopup[128];
 	TCHAR menuSettings[64];
 	TCHAR menuReader[64];
+	TCHAR menuLibrary[64];
 	TCHAR menuAbout[64];
 	TCHAR menuExit[64];
 
@@ -773,9 +776,11 @@ BOOL ShowPopupMenu(HWND hWnd, POINT pOint) {
 
 	LoadResString(IDS_MENU_SETTINGS, menuSettings, (int)(sizeof(menuSettings) / sizeof(menuSettings[0])), TEXT("&Settings..."));
 	LoadResString(IDS_MENU_READER, menuReader, (int)(sizeof(menuReader) / sizeof(menuReader[0])), TEXT("Open &TXT Reader..."));
+	LoadResString(IDS_MENU_LIBRARY, menuLibrary, (int)(sizeof(menuLibrary) / sizeof(menuLibrary[0])), TEXT("Open Book&shelf Catalog..."));
 	LoadResString(IDS_MENU_ABOUT, menuAbout, (int)(sizeof(menuAbout) / sizeof(menuAbout[0])), TEXT("&About"));
 	LoadResString(IDS_MENU_EXIT, menuExit, (int)(sizeof(menuExit) / sizeof(menuExit[0])), TEXT("E&xit"));
 	AppendMenu(hPopup, MF_STRING, IDM_READER, menuReader);
+	AppendMenu(hPopup, MF_STRING, IDM_LIBRARY, menuLibrary);
 	AppendMenu(hPopup, MF_SEPARATOR, 0, NULL);
 	AppendMenu(hPopup, MF_STRING, IDM_SETTINGS, menuSettings);
 	AppendMenu(hPopup, MF_SEPARATOR, 0, NULL);
@@ -849,6 +854,7 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPar
 	case WM_INITDIALOG:
 		g_hSettingsWnd = hDlg;
 		TryEnableDarkModeTitleBar(hDlg);
+		ApplyRoundedWindowCorners(hDlg);
 		GetWindowRect(hDlg, &rect);
 		SetWindowPos(hDlg, NULL,
 			(GetSystemMetrics(SM_CXSCREEN) - (rect.right - rect.left)) / 2,
@@ -983,11 +989,13 @@ INT_PTR CALLBACK MainDlgProc(HWND hDlg,
 			(GetSystemMetrics(SM_CYSCREEN)-(DlgRect.bottom-DlgRect.top))/2,
 			0, 0, SWP_NOSIZE);
 		TryEnableDarkModeTitleBar(hDlg);
+		ApplyRoundedWindowCorners(hDlg);
 		return(TRUE);
 
 	case WM_DESTROY :
 		StopOpacityAnimation();
 		CleanupTextReader();
+		CleanupLibrary();
 		// Unregister hotkeys
 		for (i = 0; i <= 9; i++) {
 			if (g_hotkeyAlphaRegistered[i]) {
@@ -1035,7 +1043,7 @@ INT_PTR CALLBACK MainDlgProc(HWND hDlg,
 
 		case NIN_KEYSELECT :
 		case WM_LBUTTONDBLCLK :
-			BringTextReaderToFront();
+			ShowLibraryWindow(hDlg);
 			return(TRUE);
 		}
 		return(TRUE);
@@ -1082,6 +1090,10 @@ INT_PTR CALLBACK MainDlgProc(HWND hDlg,
 
 		case IDM_READER :
 			BringTextReaderToFront();
+			return(TRUE);
+
+		case IDM_LIBRARY :
+			ShowLibraryWindow(hDlg);
 			return(TRUE);
 
 		case IDM_MMAIN :
@@ -1151,6 +1163,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	g_hInstance = hInstance;
 	InitUiLanguage();
 	InitializeTextReader(hInstance);
+	InitializeLibrary(hInstance);
 	LoadSettings();
 	g_brandBrush = CreateSolidBrush(BRAND_COLOR);
 	g_settingsBackgroundBrush = CreateSolidBrush(RGB(248, 247, 252));
@@ -1173,6 +1186,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 			CloseHandle(ghMutex);
 			ghMutex = NULL;
 			CleanupTextReader();
+			CleanupLibrary();
 			return 0;
 		}
 		LoadResString(IDS_TITLE_WARNING, titleWarning, (int)(sizeof(titleWarning) / sizeof(titleWarning[0])), TEXT("Warning"));
@@ -1241,7 +1255,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 			OpenTextReaderFromCommandLine(hWnd, lpCmdLine);
 		}
 	} else {
-		OpenTextReaderWindow(hWnd, NULL);
+		ShowLibraryWindow(hWnd);
 	}
 
 	while (GetMessage(&Msg, NULL, 0, 0)) {

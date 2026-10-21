@@ -6,6 +6,8 @@
 #include <strsafe.h>
 #include "resource.h"
 #include "VitriteReader.h"
+#include "VitriteLibrary.h"
+#include "VitriteUi.h"
 
 #define READER_CLASS_NAME L"VitriteTextReaderWindow"
 #define READER_TITLE L"Vitrite TXT 阅读器"
@@ -20,10 +22,12 @@
 #define IDC_READER_STATUS 604
 #define IDC_READER_EDIT 605
 #define IDC_READER_RECENT 606
+#define IDC_READER_LIBRARY 607
 
 #define IDM_READER_OPEN 700
 #define IDM_READER_FONT_MINUS 701
 #define IDM_READER_FONT_PLUS 702
+#define IDM_READER_LIBRARY 703
 #define IDM_READER_OPACITY_BASE 710
 #define IDM_READER_EXIT 799
 
@@ -37,6 +41,7 @@ static HMODULE g_richEditLibrary;
 static HWND g_readerWindow;
 static HWND g_readerEdit;
 static HWND g_readerOpenButton;
+static HWND g_readerLibraryButton;
 static HWND g_readerFontMinusButton;
 static HWND g_readerFontPlusButton;
 static HWND g_readerOpacityCombo;
@@ -531,6 +536,7 @@ static void UpdateReaderFontLabels(void) {
 static void ApplyReaderFontsToControls(void) {
 	ApplyReaderFontAndColors();
 	SendMessageW(g_readerOpenButton, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
+	SendMessageW(g_readerLibraryButton, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	SendMessageW(g_readerFontMinusButton, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	SendMessageW(g_readerFontPlusButton, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	SendMessageW(g_readerOpacityCombo, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
@@ -560,15 +566,18 @@ static void LayoutReaderWindow(void) {
 	padding = ReaderScale(g_readerWindow, 12);
 	toolbarHeight = ReaderScale(g_readerWindow, READER_TOOLBAR_HEIGHT);
 	buttonHeight = ReaderScale(g_readerWindow, 32);
-	openWidth = ReaderScale(g_readerWindow, 132);
-	fontWidth = ReaderScale(g_readerWindow, 92);
-	opacityWidth = ReaderScale(g_readerWindow, 112);
+	openWidth = ReaderScale(g_readerWindow, 110);
+	fontWidth = ReaderScale(g_readerWindow, 82);
+	opacityWidth = ReaderScale(g_readerWindow, 108);
 	gap = ReaderScale(g_readerWindow, 8);
 	y = ReaderScale(g_readerWindow, 10);
 	x = padding;
 
 	MoveWindow(g_readerOpenButton, x, y, openWidth, buttonHeight, TRUE);
 	x += openWidth + gap;
+	MoveWindow(g_readerLibraryButton, x, y, ReaderScale(g_readerWindow, 76),
+		buttonHeight, TRUE);
+	x += ReaderScale(g_readerWindow, 76) + gap;
 	MoveWindow(g_readerFontMinusButton, x, y, fontWidth, buttonHeight, TRUE);
 	x += fontWidth + gap;
 	MoveWindow(g_readerFontPlusButton, x, y, fontWidth, buttonHeight, TRUE);
@@ -761,6 +770,9 @@ static LRESULT CALLBACK ReaderEditSubclassProc(HWND hwnd, UINT message, WPARAM w
 		case 'O':
 			ShowReaderOpenDialog();
 			return 0;
+		case 'B':
+			ShowLibraryWindow(g_readerWindow);
+			return 0;
 		case VK_OEM_PLUS:
 		case VK_ADD:
 			ChangeReaderFont(1);
@@ -787,6 +799,9 @@ static void CreateReaderControls(HWND hwnd) {
 	g_readerOpenButton = CreateWindowExW(0, L"BUTTON", L"打开 TXT...",
 		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
 		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_OPEN, g_readerInstance, NULL);
+	g_readerLibraryButton = CreateWindowExW(0, L"BUTTON", L"书架",
+		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_LIBRARY, g_readerInstance, NULL);
 	g_readerFontMinusButton = CreateWindowExW(0, L"BUTTON", L"A−",
 		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
 		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_FONT_MINUS, g_readerInstance, NULL);
@@ -831,6 +846,7 @@ static void BuildReaderMenu(HWND hwnd) {
 		return;
 	}
 	AppendMenuW(fileMenu, MF_STRING, IDM_READER_OPEN, L"打开 TXT...\tCtrl+O");
+	AppendMenuW(fileMenu, MF_STRING, IDM_READER_LIBRARY, L"打开书架目录...\tCtrl+B");
 	AppendMenuW(fileMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenuW(fileMenu, MF_STRING, IDM_READER_EXIT, L"关闭阅读器");
 	for (percent = 100; percent >= 40; percent -= 10) {
@@ -854,10 +870,12 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 		g_readerWindow = hwnd;
 		BuildReaderMenu(hwnd);
 		CreateReaderControls(hwnd);
+		ApplyRoundedWindowCorners(hwnd);
 		return 0;
 
 	case WM_SIZE:
 		LayoutReaderWindow();
+		ApplyRoundedWindowCorners(hwnd);
 		return 0;
 
 	case WM_GETMINMAXINFO:
@@ -895,6 +913,10 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 		case IDC_READER_OPEN:
 		case IDM_READER_OPEN:
 			ShowReaderOpenDialog();
+			return 0;
+		case IDC_READER_LIBRARY:
+		case IDM_READER_LIBRARY:
+			ShowLibraryWindow(hwnd);
 			return 0;
 		case IDC_READER_FONT_MINUS:
 		case IDM_READER_FONT_MINUS:
@@ -944,6 +966,7 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 		g_readerWindow = NULL;
 		g_readerEdit = NULL;
 		g_readerOpenButton = NULL;
+		g_readerLibraryButton = NULL;
 		g_readerFontMinusButton = NULL;
 		g_readerFontPlusButton = NULL;
 		g_readerOpacityCombo = NULL;

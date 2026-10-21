@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 - 2026-10-21
+
+### Added
+
+- Rounded Windows UI corners for the reader, bookshelf, settings, and book-info dialogs.
+- Bookshelf with configurable storage folder, drag-and-drop import, multi-file import, author editing, and persistent metadata.
+- Pinyin title sorting and author-based catalog filtering.
+- Per-book favorite stars and all/favorites/non-favorites filters.
+- Portable library export containing the executable, all books, authors, favorites, and configuration.
+- Automatic portable-library discovery from the `library` folder next to `Vitrite.exe`.
+
 ## 0.1.0 - 2026-10-21
 
 First public release of the TXT-reader edition.

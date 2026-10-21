@@ -21,12 +21,24 @@
     <ClCompile Include="VitriteReader.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="VitriteLibrary.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VitriteUi.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Vitrite.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="VitriteReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VitriteLibrary.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VitriteUi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">

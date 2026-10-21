@@ -1,5 +1,18 @@
 # Development Log
 
+## 2026-10-21: Bookshelf Catalog and Portable Library
+
+### Summary
+Expanded Vitrite into a persistent personal TXT library while keeping the reader and transparency utility lightweight.
+
+### Changes
+*   Added rounded corners through Windows 11 DWM attributes with a Windows 10 region fallback.
+*   Added a card-based bookshelf with drag-and-drop and multi-file TXT import.
+*   Added copy-on-import storage, editable authors, favorite stars, pinyin sorting, author filtering, and favorite-state filtering.
+*   Stored book metadata inside the library in `library.ini`.
+*   Added one-click portable export with the executable, library, authors, favorites, and configuration.
+*   Added automatic portable-library discovery from a sibling `library` directory.
+
 ## 2026-10-21: Integrated TXT Reader
 
 ### Summary

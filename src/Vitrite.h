@@ -26,13 +26,14 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPar
 #define IDM_OPACITY_9    (IDM_OPACITY_0 + 9)
 #define IDM_TOPMOST      520
 #define IDM_READER       503
+#define IDM_LIBRARY      504
 
 #define HOTKEY_ALPHA_0  100
 #define HOTKEY_ALPHA_9  (HOTKEY_ALPHA_0 + 9)
 #define HOTKEY_TOPMOST  110
 #define HOTKEY_TOPMOST_NUMPAD 111
 
-#define VITRITE_VERSION	TEXT("0.1.0")
+#define VITRITE_VERSION	TEXT("0.2.0")
 
 
 #endif	// VITRITE_H

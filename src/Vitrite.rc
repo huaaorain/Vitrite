@@ -71,6 +71,22 @@ BEGIN
     PUSHBUTTON      "Close",IDCANCEL,344,256,64,22
 END
 
+IDD_BOOK_AUTHOR DIALOGEX 0, 0, 310, 125
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_DLGMODALFRAME
+CAPTION "Book details"
+FONT 9, "Segoe UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "Book",-1,14,14,35,10
+    LTEXT           "",IDC_BOOK_AUTHOR_TITLE,52,14,244,18,SS_LEFT | SS_ENDELLIPSIS
+    LTEXT           "Author",-1,14,49,35,10
+    EDITTEXT        IDC_BOOK_AUTHOR_NAME,52,46,244,16,ES_AUTOHSCROLL
+    LTEXT           "You can edit the author again from the bookshelf.",
+                    -1,14,72,282,20
+    DEFPUSHBUTTON   "Save",IDOK,190,98,52,18
+    PUSHBUTTON      "Cancel",IDCANCEL,248,98,52,18
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -99,6 +115,7 @@ BEGIN
     IDS_MENU_TOPMOST            "Toggle always on top\tCtrl+Shift++"
     IDS_MENU_SETTINGS           "&Settings..."
     IDS_MENU_READER             "Open &TXT Reader..."
+    IDS_MENU_LIBRARY            "Open Book&shelf Catalog..."
 END
 
 
@@ -193,6 +210,22 @@ BEGIN
                     IDC_LICENSE2,7,55,193,33
 END
 
+IDD_BOOK_AUTHOR DIALOGEX 0, 0, 310, 125
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_DLGMODALFRAME
+CAPTION "编辑书籍信息"
+FONT 9, "Microsoft YaHei UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "书名：",-1,14,14,35,10
+    LTEXT           "",IDC_BOOK_AUTHOR_TITLE,52,14,244,18,SS_LEFT | SS_ENDELLIPSIS
+    LTEXT           "作者：",-1,14,49,35,10
+    EDITTEXT        IDC_BOOK_AUTHOR_NAME,52,46,244,16,ES_AUTOHSCROLL
+    LTEXT           "导入后可随时在书架中右键编辑作者。",
+                    -1,14,72,282,20
+    DEFPUSHBUTTON   "保存",IDOK,190,98,52,18
+    PUSHBUTTON      "取消",IDCANCEL,248,98,52,18
+END
+
 /////////////////////////////////////////////////////////////////////////////
 //
 // String Table
@@ -220,6 +253,7 @@ BEGIN
     IDS_MENU_TOPMOST            "切换窗口置顶\tCtrl+Shift++"
     IDS_MENU_SETTINGS           "设置(&S)..."
     IDS_MENU_READER             "打开 TXT 阅读器(&T)..."
+    IDS_MENU_LIBRARY            "打开书架目录(&B)..."
 END
 
 #endif    // Chinese (Simplified, PRC) resources
@@ -260,6 +294,22 @@ BEGIN
                     IDC_LICENSE2,7,55,193,33
 END
 
+IDD_BOOK_AUTHOR DIALOGEX 0, 0, 310, 125
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_DLGMODALFRAME
+CAPTION "書籍情報の編集"
+FONT 9, "Yu Gothic UI", 0, 0, 0x1
+BEGIN
+    LTEXT           "書名：",-1,14,14,35,10
+    LTEXT           "",IDC_BOOK_AUTHOR_TITLE,52,14,244,18,SS_LEFT | SS_ENDELLIPSIS
+    LTEXT           "作者：",-1,14,49,35,10
+    EDITTEXT        IDC_BOOK_AUTHOR_NAME,52,46,244,16,ES_AUTOHSCROLL
+    LTEXT           "作者は後から本棚で編集できます。",
+                    -1,14,72,282,20
+    DEFPUSHBUTTON   "保存",IDOK,190,98,52,18
+    PUSHBUTTON      "キャンセル",IDCANCEL,248,98,52,18
+END
+
 /////////////////////////////////////////////////////////////////////////////
 //
 // String Table
@@ -287,6 +337,7 @@ BEGIN
     IDS_MENU_TOPMOST            "常に手前を切り替え\tCtrl+Shift++"
     IDS_MENU_SETTINGS           "設定(&S)..."
     IDS_MENU_READER             "TXT リーダーを開く(&T)..."
+    IDS_MENU_LIBRARY            "本棚カタログを開く(&B)..."
 END
 
 #endif    // Japanese (Japan) resources
