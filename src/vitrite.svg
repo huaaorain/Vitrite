@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Vitrite modern application icon</title>
+  <desc id="desc">A layered translucent window forming a crisp letter V.</desc>
+  <defs>
+    <linearGradient id="bg" x1="72" y1="56" x2="440" y2="456" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#18233f"/>
+      <stop offset="1" stop-color="#080d1c"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="118" y1="112" x2="330" y2="402" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#72efff"/>
+      <stop offset="1" stop-color="#18a9e8"/>
+    </linearGradient>
+    <linearGradient id="violet" x1="394" y1="106" x2="236" y2="406" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#6557ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#020617" flood-opacity=".48"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <path d="M104 112h112l40 166 40-166h112L304 404h-96L104 112Z" fill="#0f172a" fill-opacity=".22"/>
+    <path d="M104 112h112l67 278-75 14L104 112Z" fill="url(#cyan)" fill-opacity=".94"/>
+    <path d="M408 112H296l-67 278 75 14 104-292Z" fill="url(#violet)" fill-opacity=".9"/>
+    <path d="M216 112h80l-40 166-40-166Z" fill="#f8fbff" fill-opacity=".88"/>
+    <path d="M135 141h61l11 47h-55l-17-47Z" fill="#ffffff" fill-opacity=".32"/>
+    <path d="M316 141h61l-17 47h-55l11-47Z" fill="#ffffff" fill-opacity=".23"/>
+  </g>
+</svg>
