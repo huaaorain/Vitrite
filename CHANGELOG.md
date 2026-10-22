@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0 - 2026-10-22
+
+### Changed
+
+- Redesigned the native Win32 reader command deck with grouped file, typography, and display controls.
+- Added custom hover, pressed, disabled, and keyboard-focus drawing while retaining native button accessibility.
+- Split the typography control into decrement, current size, and increment segments.
+- Added a dedicated editorial title row with character count and live reading progress.
+- Centered the reading canvas and capped its width, with intentional outer and inner whitespace.
+- Added automatic light, dark, and Windows high-contrast theme handling.
+
+## 0.2.1 - 2026-10-22
+
+### Fixed
+
+- Added pin buttons for independently toggling always-on-top behavior in the reader and bookshelf.
+- Lowered the reader opacity minimum from 40% to 10%.
+- Reworked the reader toolbar into a responsive two-row layout.
+- Replaced the encoding status with persistent book title, character count, and reading-progress indicators.
+
 ## 0.2.0 - 2026-10-21
 
 ### Added

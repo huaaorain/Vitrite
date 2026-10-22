@@ -12,7 +12,7 @@
 #define READER_CLASS_NAME L"VitriteTextReaderWindow"
 #define READER_TITLE L"Vitrite TXT 阅读器"
 #define READER_SETTINGS_NAME L"reader.ini"
-#define READER_TOOLBAR_HEIGHT 54
+#define READER_TOOLBAR_HEIGHT 108
 #define READER_MAX_FILE_BYTES (128ULL * 1024ULL * 1024ULL)
 
 #define IDC_READER_OPEN 600
@@ -23,6 +23,10 @@
 #define IDC_READER_EDIT 605
 #define IDC_READER_RECENT 606
 #define IDC_READER_LIBRARY 607
+#define IDC_READER_WORD_COUNT 608
+#define IDC_READER_PROGRESS 609
+#define IDC_READER_PIN 610
+#define IDC_READER_FONT_SIZE 611
 
 #define IDM_READER_OPEN 700
 #define IDM_READER_FONT_MINUS 701
@@ -44,18 +48,38 @@ static HWND g_readerOpenButton;
 static HWND g_readerLibraryButton;
 static HWND g_readerFontMinusButton;
 static HWND g_readerFontPlusButton;
+static HWND g_readerFontSizeLabel;
 static HWND g_readerOpacityCombo;
 static HWND g_readerStatus;
+static HWND g_readerWordInfo;
+static HWND g_readerProgressInfo;
+static HWND g_readerPinButton;
 static HFONT g_readerTextFont;
 static HFONT g_readerUiFont;
+static HFONT g_readerTitleFont;
 static HBRUSH g_readerBackgroundBrush;
 static HBRUSH g_readerToolbarBrush;
+static VITRITE_UI_THEME g_readerTheme;
+static BOOL g_readerThemeReady;
+static int g_readerSeparator1;
+static int g_readerSeparator2;
 static WCHAR g_readerCurrentPath[MAX_PATH];
+static WCHAR g_readerBookTitle[192];
 static RECT g_readerSavedRect;
+static SIZE_T g_readerCharacterCount;
 static int g_readerFontPoints = 16;
 static int g_readerOpacityPercent = 100;
+static BOOL g_readerTopmost;
 static UINT g_readerDpi = 96;
 static BOOL g_readerClassRegistered;
+
+typedef enum READER_BUTTON_STYLE {
+	READER_BUTTON_PRIMARY,
+	READER_BUTTON_SECONDARY,
+	READER_BUTTON_SEGMENT
+} READER_BUTTON_STYLE;
+
+#define READER_BUTTON_HOVER_PROP L"VitriteControlHover"
 
 typedef enum READER_ENCODING {
 	READER_ENCODING_UTF8,
@@ -131,11 +155,16 @@ static void LoadReaderSettings(void) {
 		g_readerFontPoints = 42;
 	}
 	g_readerOpacityPercent = GetPrivateProfileIntW(L"Reader", L"OpacityPercent", 100, path);
-	if (g_readerOpacityPercent < 35) {
-		g_readerOpacityPercent = 35;
+	if (g_readerOpacityPercent < 10) {
+		g_readerOpacityPercent = 10;
 	} else if (g_readerOpacityPercent > 100) {
 		g_readerOpacityPercent = 100;
 	}
+	g_readerOpacityPercent = ((g_readerOpacityPercent + 5) / 10) * 10;
+	if (g_readerOpacityPercent > 100) {
+		g_readerOpacityPercent = 100;
+	}
+	g_readerTopmost = GetPrivateProfileIntW(L"Reader", L"AlwaysOnTop", 0, path) != 0;
 
 	memset(&g_readerSavedRect, 0, sizeof(g_readerSavedRect));
 	g_readerSavedRect.left = GetPrivateProfileIntW(L"Window", L"Left", 0, path);
@@ -168,21 +197,10 @@ static void SaveReaderSettings(void) {
 	}
 	WriteReaderProfileInt(L"Reader", L"FontPoints", g_readerFontPoints, path);
 	WriteReaderProfileInt(L"Reader", L"OpacityPercent", g_readerOpacityPercent, path);
-}
-
-static const WCHAR* EncodingName(READER_ENCODING encoding) {
-	switch (encoding) {
-	case READER_ENCODING_UTF8_BOM:
-		return L"UTF-8 BOM";
-	case READER_ENCODING_UTF16_LE:
-		return L"UTF-16 LE";
-	case READER_ENCODING_UTF16_BE:
-		return L"UTF-16 BE";
-	case READER_ENCODING_SYSTEM:
-		return L"系统编码";
-	default:
-		return L"UTF-8";
+	if (g_readerWindow != NULL && IsWindow(g_readerWindow)) {
+		g_readerTopmost = IsWindowPinnedTopmost(g_readerWindow);
 	}
+	WriteReaderProfileInt(L"Reader", L"AlwaysOnTop", g_readerTopmost ? 1 : 0, path);
 }
 
 static WCHAR* NormalizeReaderText(const WCHAR* source, SIZE_T sourceLength, SIZE_T* outputLength) {
@@ -473,6 +491,10 @@ static void RecreateReaderFonts(HWND hwnd) {
 		DeleteObject(g_readerUiFont);
 		g_readerUiFont = NULL;
 	}
+	if (g_readerTitleFont != NULL) {
+		DeleteObject(g_readerTitleFont);
+		g_readerTitleFont = NULL;
+	}
 
 	memset(&logFont, 0, sizeof(logFont));
 	logFont.lfHeight = -MulDiv(g_readerFontPoints, (int)dpi, 72);
@@ -500,6 +522,18 @@ static void RecreateReaderFonts(HWND hwnd) {
 	if (g_readerUiFont == NULL) {
 		g_readerUiFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 	}
+
+	memset(&logFont, 0, sizeof(logFont));
+	logFont.lfHeight = -MulDiv(15, (int)dpi, 72);
+	logFont.lfWeight = FW_SEMIBOLD;
+	logFont.lfCharSet = DEFAULT_CHARSET;
+	logFont.lfQuality = CLEARTYPE_QUALITY;
+	logFont.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+	StringCchCopyW(logFont.lfFaceName, LF_FACESIZE, L"Microsoft YaHei UI");
+	g_readerTitleFont = CreateFontIndirectW(&logFont);
+	if (g_readerTitleFont == NULL) {
+		g_readerTitleFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+	}
 }
 
 static void ApplyReaderFontAndColors(void) {
@@ -515,7 +549,11 @@ static void ApplyReaderFontAndColors(void) {
 	format.yHeight = g_readerFontPoints * 20;
 	format.wWeight = FW_NORMAL;
 	format.bCharSet = DEFAULT_CHARSET;
-	format.crTextColor = READER_TEXT_COLOR;
+	if (!g_readerThemeReady) {
+		GetVitriteUiTheme(g_readerWindow, &g_readerTheme);
+		g_readerThemeReady = TRUE;
+	}
+	format.crTextColor = g_readerTheme.text;
 	StringCchCopyW(format.szFaceName, LF_FACESIZE, L"Microsoft YaHei UI");
 	SendMessageW(g_readerEdit, EM_SETCHARFORMAT, SCF_ALL, (LPARAM)&format);
 }
@@ -524,12 +562,96 @@ static void UpdateReaderFontLabels(void) {
 	WCHAR text[48];
 
 	if (g_readerFontMinusButton != NULL) {
-		StringCchPrintfW(text, 48, L"A−  %d pt", g_readerFontPoints);
-		SetWindowTextW(g_readerFontMinusButton, text);
+		SetWindowTextW(g_readerFontMinusButton, L"A−");
 	}
 	if (g_readerFontPlusButton != NULL) {
-		StringCchPrintfW(text, 48, L"A+  %d pt", g_readerFontPoints);
-		SetWindowTextW(g_readerFontPlusButton, text);
+		SetWindowTextW(g_readerFontPlusButton, L"A+");
+	}
+	if (g_readerFontSizeLabel != NULL) {
+		StringCchPrintfW(text, 48, L"%d pt", g_readerFontPoints);
+		SetWindowTextW(g_readerFontSizeLabel, text);
+	}
+}
+
+static void ReaderDisplayTitle(const WCHAR* fileName, LPWSTR title, int titleCount) {
+	LPWSTR extension;
+	StringCchCopyW(title, (size_t)titleCount, fileName);
+	extension = wcsrchr(title, L'.');
+	if (extension != NULL && _wcsicmp(extension, L".txt") == 0) {
+		*extension = L'\0';
+	}
+}
+
+static SIZE_T CountReaderCharacters(const WCHAR* text, SIZE_T length) {
+	SIZE_T count = 0;
+	SIZE_T i;
+	for (i = 0; i < length; i++) {
+		WCHAR ch = text[i];
+		if (ch != L' ' && ch != L'\t' && ch != L'\r' && ch != L'\n' &&
+			ch != L'\x3000' && ch != L'\0') {
+			count++;
+		}
+	}
+	return count;
+}
+
+static void UpdateReaderProgress(void) {
+	WCHAR progressText[64];
+	int firstLine;
+	int lineCount;
+	int visibleLines;
+	int maxFirstLine;
+	int progress;
+	RECT rect;
+	HDC dc;
+	HFONT oldFont;
+	TEXTMETRICW metrics;
+
+	if (g_readerProgressInfo == NULL) {
+		return;
+	}
+	if (g_readerEdit == NULL || g_readerCurrentPath[0] == L'\0') {
+		SetWindowTextW(g_readerProgressInfo, L"进度：0%");
+		return;
+	}
+	GetClientRect(g_readerEdit, &rect);
+	dc = GetDC(g_readerEdit);
+	oldFont = (HFONT)SelectObject(dc, g_readerTextFont);
+	GetTextMetricsW(dc, &metrics);
+	SelectObject(dc, oldFont);
+	ReleaseDC(g_readerEdit, dc);
+	visibleLines = max(1, (rect.bottom - rect.top - 4) /
+		max(1, metrics.tmHeight + metrics.tmExternalLeading));
+	lineCount = (int)SendMessageW(g_readerEdit, EM_GETLINECOUNT, 0, 0);
+	firstLine = (int)SendMessageW(g_readerEdit, EM_GETFIRSTVISIBLELINE, 0, 0);
+	maxFirstLine = max(0, lineCount - visibleLines);
+	progress = maxFirstLine > 0
+		? (firstLine * 100 + maxFirstLine / 2) / maxFirstLine
+		: 100;
+	progress = max(0, min(100, progress));
+	StringCchPrintfW(progressText, 64, L"进度：%d%%", progress);
+	SetWindowTextW(g_readerProgressInfo, progressText);
+}
+
+static void UpdateReaderInformation(void) {
+	WCHAR wordText[64];
+	if (g_readerStatus != NULL) {
+		SetWindowTextW(g_readerStatus,
+			g_readerBookTitle[0] ? g_readerBookTitle : L"未打开书籍");
+	}
+	if (g_readerWordInfo != NULL) {
+		StringCchPrintfW(wordText, 64, L"字数：%Iu",
+			(size_t)g_readerCharacterCount);
+		SetWindowTextW(g_readerWordInfo, wordText);
+	}
+	UpdateReaderProgress();
+}
+
+static void ToggleReaderTopmost(void) {
+	g_readerTopmost = !IsWindowPinnedTopmost(g_readerWindow);
+	SetWindowPinnedTopmost(g_readerWindow, g_readerTopmost);
+	if (g_readerPinButton != NULL) {
+		InvalidateRect(g_readerPinButton, NULL, TRUE);
 	}
 }
 
@@ -539,60 +661,267 @@ static void ApplyReaderFontsToControls(void) {
 	SendMessageW(g_readerLibraryButton, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	SendMessageW(g_readerFontMinusButton, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	SendMessageW(g_readerFontPlusButton, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
+	SendMessageW(g_readerFontSizeLabel, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	SendMessageW(g_readerOpacityCombo, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
-	SendMessageW(g_readerStatus, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
+	SendMessageW(g_readerStatus, WM_SETFONT, (WPARAM)g_readerTitleFont, TRUE);
+	SendMessageW(g_readerWordInfo, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
+	SendMessageW(g_readerProgressInfo, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	UpdateReaderFontLabels();
+}
+
+static READER_BUTTON_STYLE ReaderButtonStyleForId(UINT id) {
+	switch (id) {
+	case IDC_READER_OPEN:
+		return READER_BUTTON_PRIMARY;
+	case IDC_READER_FONT_MINUS:
+	case IDC_READER_FONT_PLUS:
+		return READER_BUTTON_SEGMENT;
+	default:
+		return READER_BUTTON_SECONDARY;
+	}
+}
+
+static LRESULT CALLBACK ReaderButtonSubclassProc(HWND hwnd, UINT message,
+	WPARAM wParam, LPARAM lParam, UINT_PTR subclassId, DWORD_PTR referenceData) {
+	(void)subclassId;
+	(void)referenceData;
+	if (message == WM_MOUSEMOVE) {
+		TRACKMOUSEEVENT tracking;
+		if (GetPropW(hwnd, READER_BUTTON_HOVER_PROP) == NULL) {
+			SetPropW(hwnd, READER_BUTTON_HOVER_PROP, (HANDLE)(ULONG_PTR)1);
+			InvalidateRect(hwnd, NULL, FALSE);
+		}
+		memset(&tracking, 0, sizeof(tracking));
+		tracking.cbSize = sizeof(tracking);
+		tracking.dwFlags = TME_LEAVE;
+		tracking.hwndTrack = hwnd;
+		TrackMouseEvent(&tracking);
+	} else if (message == WM_MOUSELEAVE) {
+		RemovePropW(hwnd, READER_BUTTON_HOVER_PROP);
+		InvalidateRect(hwnd, NULL, FALSE);
+	} else if (message == WM_SETFOCUS || message == WM_KILLFOCUS ||
+		message == WM_ENABLE) {
+		InvalidateRect(hwnd, NULL, FALSE);
+	}
+	return DefSubclassProc(hwnd, message, wParam, lParam);
+}
+
+static void DrawReaderToolbarButton(const DRAWITEMSTRUCT* item) {
+	VITRITE_UI_THEME theme;
+	READER_BUTTON_STYLE style;
+	HBRUSH fillBrush;
+	HPEN borderPen;
+	HGDIOBJ oldBrush;
+	HGDIOBJ oldPen;
+	HFONT oldFont;
+	WCHAR text[128];
+	RECT rect;
+	COLORREF fill;
+	COLORREF border;
+	COLORREF textColor;
+	BOOL hovered;
+	BOOL pressed;
+	BOOL disabled;
+
+	if (item == NULL || item->hDC == NULL) {
+		return;
+	}
+	GetVitriteUiTheme(item->hwndItem, &theme);
+	style = ReaderButtonStyleForId(item->CtlID);
+	hovered = GetPropW(item->hwndItem, READER_BUTTON_HOVER_PROP) != NULL;
+	pressed = (item->itemState & ODS_SELECTED) != 0;
+	disabled = (item->itemState & ODS_DISABLED) != 0;
+	fill = style == READER_BUTTON_PRIMARY ? theme.accent : theme.button;
+	border = style == READER_BUTTON_PRIMARY ? theme.accent : theme.border;
+	textColor = style == READER_BUTTON_PRIMARY ? theme.accentText : theme.text;
+	if (hovered) {
+		fill = style == READER_BUTTON_PRIMARY ? theme.accentHover : theme.buttonHover;
+		if (theme.highContrast && style != READER_BUTTON_PRIMARY) {
+			fill = theme.accent;
+			border = theme.accent;
+			textColor = theme.accentText;
+		}
+	}
+	if (pressed) {
+		fill = theme.buttonPressed;
+		if (style == READER_BUTTON_PRIMARY || theme.highContrast) {
+			fill = theme.accentHover;
+			textColor = theme.accentText;
+		}
+	}
+	if (disabled) {
+		fill = theme.headerBackground;
+		textColor = theme.mutedText;
+		border = theme.separator;
+	}
+	rect = item->rcItem;
+	fillBrush = CreateSolidBrush(fill);
+	borderPen = CreatePen(PS_SOLID, 1, border);
+	oldBrush = SelectObject(item->hDC, fillBrush);
+	oldPen = SelectObject(item->hDC, borderPen);
+	RoundRect(item->hDC, rect.left, rect.top, rect.right, rect.bottom, 8, 8);
+	SelectObject(item->hDC, oldPen);
+	SelectObject(item->hDC, oldBrush);
+	DeleteObject(borderPen);
+	DeleteObject(fillBrush);
+
+	GetWindowTextW(item->hwndItem, text, 128);
+	SetBkMode(item->hDC, TRANSPARENT);
+	SetTextColor(item->hDC, textColor);
+	oldFont = (HFONT)SelectObject(item->hDC, g_readerUiFont);
+	InflateRect(&rect, -6, -2);
+	DrawTextW(item->hDC, text, -1, &rect,
+		DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+	SelectObject(item->hDC, oldFont);
+	if (item->itemState & ODS_FOCUS) {
+		HPEN focusPen = CreatePen(PS_SOLID, 2, theme.focus);
+		HGDIOBJ previous = SelectObject(item->hDC, focusPen);
+		HGDIOBJ previousBrush = SelectObject(item->hDC,
+			GetStockObject(NULL_BRUSH));
+		RoundRect(item->hDC, rect.left + 1, rect.top + 1,
+			rect.right - 1, rect.bottom - 1, 6, 6);
+		SelectObject(item->hDC, previousBrush);
+		SelectObject(item->hDC, previous);
+		DeleteObject(focusPen);
+	}
+}
+
+static void ApplyReaderSystemTheme(void) {
+	typedef HRESULT (WINAPI *PFN_SetWindowTheme)(HWND, LPCWSTR, LPCWSTR);
+	HMODULE uxtheme;
+	PFN_SetWindowTheme setWindowTheme;
+
+	GetVitriteUiTheme(g_readerWindow, &g_readerTheme);
+	g_readerThemeReady = TRUE;
+	if (g_readerBackgroundBrush != NULL) {
+		DeleteObject(g_readerBackgroundBrush);
+	}
+	if (g_readerToolbarBrush != NULL) {
+		DeleteObject(g_readerToolbarBrush);
+	}
+	g_readerBackgroundBrush = CreateSolidBrush(g_readerTheme.windowBackground);
+	g_readerToolbarBrush = CreateSolidBrush(g_readerTheme.headerBackground);
+	if (g_readerEdit != NULL) {
+		SendMessageW(g_readerEdit, EM_SETBKGNDCOLOR, 0,
+			(LPARAM)g_readerTheme.surfaceBackground);
+	}
+	ApplyWindowDarkTitleBar(g_readerWindow,
+		g_readerTheme.dark && !g_readerTheme.highContrast);
+	ApplyReaderFontsToControls();
+
+	uxtheme = LoadLibraryW(L"uxtheme.dll");
+	setWindowTheme = uxtheme != NULL
+		? (PFN_SetWindowTheme)GetProcAddress(uxtheme, "SetWindowTheme")
+		: NULL;
+	if (setWindowTheme != NULL && g_readerOpacityCombo != NULL) {
+		setWindowTheme(g_readerOpacityCombo,
+			g_readerTheme.dark && !g_readerTheme.highContrast
+				? L"DarkMode_Explorer" : NULL, NULL);
+	}
+	RedrawWindow(g_readerWindow, NULL, NULL,
+		RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
 }
 
 static void LayoutReaderWindow(void) {
 	RECT client;
+	RECT editorRect;
 	int width;
 	int height;
 	int padding;
 	int toolbarHeight;
 	int buttonHeight;
+	int groupGap;
 	int openWidth;
+	int libraryWidth;
 	int fontWidth;
+	int fontSizeWidth;
 	int opacityWidth;
+	int pinSize;
+	int wordWidth;
+	int progressWidth;
+	int infoTop;
+	int infoHeight;
 	int gap;
+	int primaryEnd;
+	int typeStart;
+	int typeEnd;
+	int readingWidth;
+	int readingX;
 	int x;
 	int y;
+	BOOL compact;
 
 	if (g_readerWindow == NULL || !GetClientRect(g_readerWindow, &client)) {
 		return;
 	}
 	width = client.right - client.left;
 	height = client.bottom - client.top;
-	padding = ReaderScale(g_readerWindow, 12);
+	compact = width < ReaderScale(g_readerWindow, 760);
+	padding = ReaderScale(g_readerWindow, compact ? 12 : 16);
 	toolbarHeight = ReaderScale(g_readerWindow, READER_TOOLBAR_HEIGHT);
-	buttonHeight = ReaderScale(g_readerWindow, 32);
-	openWidth = ReaderScale(g_readerWindow, 110);
-	fontWidth = ReaderScale(g_readerWindow, 82);
-	opacityWidth = ReaderScale(g_readerWindow, 108);
-	gap = ReaderScale(g_readerWindow, 8);
+	buttonHeight = ReaderScale(g_readerWindow, 34);
+	groupGap = ReaderScale(g_readerWindow, compact ? 14 : 18);
+	openWidth = ReaderScale(g_readerWindow, compact ? 92 : 112);
+	libraryWidth = ReaderScale(g_readerWindow, compact ? 60 : 72);
+	fontWidth = ReaderScale(g_readerWindow, compact ? 34 : 36);
+	fontSizeWidth = ReaderScale(g_readerWindow, compact ? 48 : 54);
+	opacityWidth = ReaderScale(g_readerWindow, compact ? 96 : 112);
+	pinSize = ReaderScale(g_readerWindow, 34);
+	wordWidth = ReaderScale(g_readerWindow, compact ? 108 : 120);
+	progressWidth = ReaderScale(g_readerWindow, compact ? 104 : 116);
+	gap = ReaderScale(g_readerWindow, compact ? 6 : 8);
 	y = ReaderScale(g_readerWindow, 10);
 	x = padding;
 
 	MoveWindow(g_readerOpenButton, x, y, openWidth, buttonHeight, TRUE);
 	x += openWidth + gap;
-	MoveWindow(g_readerLibraryButton, x, y, ReaderScale(g_readerWindow, 76),
-		buttonHeight, TRUE);
-	x += ReaderScale(g_readerWindow, 76) + gap;
+	MoveWindow(g_readerLibraryButton, x, y, libraryWidth, buttonHeight, TRUE);
+	primaryEnd = x + libraryWidth;
+	g_readerSeparator1 = primaryEnd + groupGap / 2;
+	typeStart = primaryEnd + groupGap;
+	x = typeStart;
 	MoveWindow(g_readerFontMinusButton, x, y, fontWidth, buttonHeight, TRUE);
-	x += fontWidth + gap;
+	x += fontWidth + ReaderScale(g_readerWindow, 4);
+	MoveWindow(g_readerFontSizeLabel, x, y, fontSizeWidth, buttonHeight, TRUE);
+	x += fontSizeWidth + ReaderScale(g_readerWindow, 4);
 	MoveWindow(g_readerFontPlusButton, x, y, fontWidth, buttonHeight, TRUE);
-	x += fontWidth + gap;
+	typeEnd = x + fontWidth;
+	g_readerSeparator2 = typeEnd + groupGap / 2;
+	x = width - padding - pinSize - gap - opacityWidth;
 	MoveWindow(g_readerOpacityCombo, x, y + ReaderScale(g_readerWindow, 2),
 		opacityWidth, ReaderScale(g_readerWindow, 280), TRUE);
-	x += opacityWidth + gap * 2;
-	MoveWindow(g_readerStatus, x, y,
-		width - x - padding > 0 ? width - x - padding : 0,
-		buttonHeight, TRUE);
+	MoveWindow(g_readerPinButton, width - padding - pinSize, y,
+		pinSize, buttonHeight, TRUE);
 
-	MoveWindow(g_readerEdit, padding, toolbarHeight,
-		width - padding * 2 > 0 ? width - padding * 2 : 0,
-		height - toolbarHeight - padding > 0 ? height - toolbarHeight - padding : 0,
-		TRUE);
+	infoTop = y + buttonHeight + ReaderScale(g_readerWindow, 11);
+	infoHeight = ReaderScale(g_readerWindow, 30);
+	x = padding;
+	MoveWindow(g_readerStatus, x + ReaderScale(g_readerWindow, 2), infoTop,
+		max(0, width - padding * 2 - wordWidth - progressWidth - gap * 2 -
+			ReaderScale(g_readerWindow, 2)),
+		infoHeight, TRUE);
+	x = width - padding - progressWidth - gap - wordWidth;
+	MoveWindow(g_readerWordInfo, x, infoTop, wordWidth, infoHeight, TRUE);
+	x = width - padding - progressWidth;
+	MoveWindow(g_readerProgressInfo, x, infoTop, progressWidth,
+		infoHeight, TRUE);
+
+	readingWidth = min(max(0, width - padding * 2),
+		ReaderScale(g_readerWindow, 1040));
+	readingX = (width - readingWidth) / 2;
+	MoveWindow(g_readerEdit, readingX, toolbarHeight,
+		readingWidth,
+		max(0, height - toolbarHeight - padding), TRUE);
+	if (g_readerEdit != NULL && GetClientRect(g_readerEdit, &editorRect)) {
+		RECT formatRect;
+		formatRect.left = ReaderScale(g_readerWindow, 20);
+		formatRect.top = ReaderScale(g_readerWindow, 16);
+		formatRect.right = max(formatRect.left,
+			editorRect.right - ReaderScale(g_readerWindow, 20));
+		formatRect.bottom = max(formatRect.top,
+			editorRect.bottom - ReaderScale(g_readerWindow, 16));
+		SendMessageW(g_readerEdit, EM_SETRECT, 0, (LPARAM)&formatRect);
+	}
 	InvalidateRect(g_readerWindow, NULL, TRUE);
 }
 
@@ -605,7 +934,7 @@ static int ReaderOpacityFromCombo(void) {
 		return g_readerOpacityPercent;
 	}
 	data = SendMessageW(g_readerOpacityCombo, CB_GETITEMDATA, index, 0);
-	return data >= 35 && data <= 100 ? (int)data : 100;
+	return data >= 10 && data <= 100 ? (int)data : 100;
 }
 
 static void SelectReaderOpacityCombo(int percent) {
@@ -624,8 +953,8 @@ static void SelectReaderOpacityCombo(int percent) {
 static void ApplyReaderOpacity(int percent) {
 	LONG_PTR style;
 
-	if (percent < 35) {
-		percent = 35;
+	if (percent < 10) {
+		percent = 10;
 	} else if (percent > 100) {
 		percent = 100;
 	}
@@ -640,7 +969,7 @@ static void ApplyReaderOpacity(int percent) {
 
 static void PopulateReaderOpacityCombo(void) {
 	WCHAR text[32];
-	int values[] = {100, 90, 80, 70, 60, 50, 40};
+	int values[] = {100, 90, 80, 70, 60, 50, 40, 30, 20, 10};
 	int i;
 	int index;
 
@@ -681,7 +1010,6 @@ static BOOL LoadReaderFile(const WCHAR* path) {
 	SETTEXTEX setText;
 	CHARRANGE range;
 	WCHAR title[MAX_PATH + 64];
-	WCHAR status[MAX_PATH + 96];
 	const WCHAR* fileName;
 
 	if (path == NULL || path[0] == L'\0') {
@@ -691,8 +1019,10 @@ static BOOL LoadReaderFile(const WCHAR* path) {
 		ShowReaderLoadError(errorCode);
 		return FALSE;
 	}
+	(void)encoding;
 
 	StringCchCopyW(g_readerCurrentPath, MAX_PATH, path);
+	g_readerCharacterCount = CountReaderCharacters(text, textLength);
 	memset(&setText, 0, sizeof(setText));
 	setText.flags = ST_DEFAULT;
 	setText.codepage = 1200;
@@ -707,12 +1037,10 @@ static BOOL LoadReaderFile(const WCHAR* path) {
 	InvalidateRect(g_readerEdit, NULL, TRUE);
 
 	fileName = ReaderFileName(path);
+	ReaderDisplayTitle(fileName, g_readerBookTitle, 192);
 	StringCchPrintfW(title, MAX_PATH + 64, L"%s — " READER_TITLE, fileName);
 	SetWindowTextW(g_readerWindow, title);
-	StringCchPrintfW(status, MAX_PATH + 96,
-		L"%s  ·  %s  ·  %Iu 字符  ·  自动换行", fileName, EncodingName(encoding),
-		(size_t)textLength);
-	SetWindowTextW(g_readerStatus, status);
+	UpdateReaderInformation();
 	SetFocus(g_readerEdit);
 	return TRUE;
 }
@@ -792,28 +1120,42 @@ static LRESULT CALLBACK ReaderEditSubclassProc(HWND hwnd, UINT message, WPARAM w
 static void CreateReaderControls(HWND hwnd) {
 	DWORD editStyle;
 
-	g_readerBackgroundBrush = CreateSolidBrush(READER_BG_COLOR);
-	g_readerToolbarBrush = CreateSolidBrush(READER_TOOLBAR_COLOR);
 	RecreateReaderFonts(hwnd);
 
 	g_readerOpenButton = CreateWindowExW(0, L"BUTTON", L"打开 TXT...",
-		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
 		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_OPEN, g_readerInstance, NULL);
 	g_readerLibraryButton = CreateWindowExW(0, L"BUTTON", L"书架",
-		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
 		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_LIBRARY, g_readerInstance, NULL);
 	g_readerFontMinusButton = CreateWindowExW(0, L"BUTTON", L"A−",
-		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
 		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_FONT_MINUS, g_readerInstance, NULL);
+	g_readerFontSizeLabel = CreateWindowExW(0, L"STATIC", L"16 pt",
+		WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
+		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_FONT_SIZE,
+		g_readerInstance, NULL);
 	g_readerFontPlusButton = CreateWindowExW(0, L"BUTTON", L"A+",
-		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
 		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_FONT_PLUS, g_readerInstance, NULL);
 	g_readerOpacityCombo = CreateWindowExW(0, WC_COMBOBOXW, L"",
 		WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
 		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_OPACITY, g_readerInstance, NULL);
-	g_readerStatus = CreateWindowExW(0, L"STATIC", L"打开一个 TXT 文件开始阅读",
+	g_readerPinButton = CreateWindowExW(0, L"BUTTON", L"固定在最前",
+		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_PIN,
+		g_readerInstance, NULL);
+	g_readerStatus = CreateWindowExW(0, L"STATIC", L"未打开书籍",
 		WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE | SS_ENDELLIPSIS,
 		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_STATUS, g_readerInstance, NULL);
+	g_readerWordInfo = CreateWindowExW(0, L"STATIC", L"字数：0",
+		WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE | SS_ENDELLIPSIS,
+		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_WORD_COUNT,
+		g_readerInstance, NULL);
+	g_readerProgressInfo = CreateWindowExW(0, L"STATIC", L"进度：0%",
+		WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE | SS_ENDELLIPSIS,
+		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_PROGRESS,
+		g_readerInstance, NULL);
 
 	editStyle = WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | ES_MULTILINE |
 		ES_READONLY | ES_NOHIDESEL | ES_AUTOVSCROLL;
@@ -822,12 +1164,20 @@ static void CreateReaderControls(HWND hwnd) {
 		g_readerInstance, NULL);
 
 	PopulateReaderOpacityCombo();
-	ApplyReaderFontsToControls();
+	ApplyReaderSystemTheme();
 	ApplyReaderOpacity(g_readerOpacityPercent);
-	SendMessageW(g_readerEdit, EM_SETBKGNDCOLOR, 0, (LPARAM)READER_BG_COLOR);
 	SendMessageW(g_readerEdit, EM_SETLIMITTEXT, 0x7FFFFFF0, 0);
+	SendMessageW(g_readerEdit, EM_SETEVENTMASK, 0,
+		ENM_SCROLL | ENM_SCROLLEVENTS | ENM_SELCHANGE);
 	SetWindowSubclass(g_readerEdit, ReaderEditSubclassProc, 1, 0);
+	SetWindowSubclass(g_readerOpenButton, ReaderButtonSubclassProc, 11, 0);
+	SetWindowSubclass(g_readerLibraryButton, ReaderButtonSubclassProc, 12, 0);
+	SetWindowSubclass(g_readerFontMinusButton, ReaderButtonSubclassProc, 13, 0);
+	SetWindowSubclass(g_readerFontPlusButton, ReaderButtonSubclassProc, 14, 0);
+	SetWindowSubclass(g_readerPinButton, ReaderButtonSubclassProc, 15, 0);
 	LayoutReaderWindow();
+	SetWindowPinnedTopmost(hwnd, g_readerTopmost);
+	UpdateReaderInformation();
 }
 
 static void BuildReaderMenu(HWND hwnd) {
@@ -849,7 +1199,7 @@ static void BuildReaderMenu(HWND hwnd) {
 	AppendMenuW(fileMenu, MF_STRING, IDM_READER_LIBRARY, L"打开书架目录...\tCtrl+B");
 	AppendMenuW(fileMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenuW(fileMenu, MF_STRING, IDM_READER_EXIT, L"关闭阅读器");
-	for (percent = 100; percent >= 40; percent -= 10) {
+	for (percent = 100; percent >= 10; percent -= 10) {
 		StringCchPrintfW(text, 32, L"%d%%", percent);
 		AppendMenuW(opacityMenu, MF_STRING, IDM_READER_OPACITY_BASE + percent, text);
 	}
@@ -875,6 +1225,7 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 
 	case WM_SIZE:
 		LayoutReaderWindow();
+		UpdateReaderProgress();
 		ApplyRoundedWindowCorners(hwnd);
 		return 0;
 
@@ -892,21 +1243,99 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 		RecreateReaderFonts(hwnd);
 		ApplyReaderFontsToControls();
 		LayoutReaderWindow();
+		UpdateReaderProgress();
 		return 0;
 	}
 
 	case WM_ERASEBKGND:
 	{
 		RECT rect;
+		RECT header;
 		GetClientRect(hwnd, &rect);
 		FillRect((HDC)wParam, &rect, g_readerBackgroundBrush);
+		header = rect;
+		header.bottom = min(header.bottom,
+			ReaderScale(hwnd, READER_TOOLBAR_HEIGHT));
+		FillRect((HDC)wParam, &header, g_readerToolbarBrush);
 		return 1;
+	}
+
+	case WM_PAINT:
+	{
+		PAINTSTRUCT paint;
+		HDC dc = BeginPaint(hwnd, &paint);
+		HPEN pen = CreatePen(PS_SOLID, 1, g_readerTheme.separator);
+		HGDIOBJ oldPen = SelectObject(dc, pen);
+		int top = ReaderScale(hwnd, 17);
+		int bottom = ReaderScale(hwnd, 41);
+		MoveToEx(dc, g_readerSeparator1, top, NULL);
+		LineTo(dc, g_readerSeparator1, bottom);
+		MoveToEx(dc, g_readerSeparator2, top, NULL);
+		LineTo(dc, g_readerSeparator2, bottom);
+		MoveToEx(dc, 0, ReaderScale(hwnd, READER_TOOLBAR_HEIGHT) - 1, NULL);
+		LineTo(dc, paint.rcPaint.right,
+			ReaderScale(hwnd, READER_TOOLBAR_HEIGHT) - 1);
+		SelectObject(dc, oldPen);
+		DeleteObject(pen);
+		EndPaint(hwnd, &paint);
+		return 0;
 	}
 
 	case WM_CTLCOLORSTATIC:
 		SetBkMode((HDC)wParam, TRANSPARENT);
-		SetTextColor((HDC)wParam, READER_SUBTLE_COLOR);
+		SetBkColor((HDC)wParam, g_readerTheme.headerBackground);
+		SetTextColor((HDC)wParam,
+			((HWND)lParam == g_readerStatus ||
+			 (HWND)lParam == g_readerFontSizeLabel)
+				? g_readerTheme.text : g_readerTheme.mutedText);
 		return (LRESULT)g_readerToolbarBrush;
+
+	case WM_CTLCOLORLISTBOX:
+		SetBkColor((HDC)wParam, g_readerTheme.headerBackground);
+		SetTextColor((HDC)wParam, g_readerTheme.text);
+		return (LRESULT)g_readerToolbarBrush;
+
+	case WM_DRAWITEM:
+	{
+		DRAWITEMSTRUCT* item = (DRAWITEMSTRUCT*)lParam;
+		if (item != NULL && item->CtlID == IDC_READER_PIN) {
+			DrawPinButton(item, IsWindowPinnedTopmost(hwnd));
+			return TRUE;
+		}
+		if (item != NULL && (item->CtlID == IDC_READER_OPEN ||
+			item->CtlID == IDC_READER_LIBRARY ||
+			item->CtlID == IDC_READER_FONT_MINUS ||
+			item->CtlID == IDC_READER_FONT_PLUS)) {
+			DrawReaderToolbarButton(item);
+			return TRUE;
+		}
+		break;
+	}
+
+	case WM_SETTINGCHANGE:
+	case WM_THEMECHANGED:
+	case WM_SYSCOLORCHANGE:
+		ApplyReaderSystemTheme();
+		UpdateReaderProgress();
+		return 0;
+
+	case WM_NOTIFY:
+	{
+		NMHDR* header = (NMHDR*)lParam;
+		if (header != NULL && header->hwndFrom == g_readerEdit &&
+			(header->code == EN_VSCROLL || header->code == EN_SELCHANGE)) {
+			UpdateReaderProgress();
+			return 0;
+		}
+		break;
+	}
+
+	case WM_WINDOWPOSCHANGED:
+		g_readerTopmost = IsWindowPinnedTopmost(hwnd);
+		if (g_readerPinButton != NULL) {
+			InvalidateRect(g_readerPinButton, NULL, FALSE);
+		}
+		break;
 
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
@@ -934,8 +1363,11 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 				ApplyReaderOpacity(ReaderOpacityFromCombo());
 			}
 			return 0;
+		case IDC_READER_PIN:
+			ToggleReaderTopmost();
+			return 0;
 		}
-		if (LOWORD(wParam) >= IDM_READER_OPACITY_BASE + 40 &&
+		if (LOWORD(wParam) >= IDM_READER_OPACITY_BASE + 10 &&
 			LOWORD(wParam) <= IDM_READER_OPACITY_BASE + 100) {
 			ApplyReaderOpacity((int)(LOWORD(wParam) - IDM_READER_OPACITY_BASE));
 			SelectReaderOpacityCombo(g_readerOpacityPercent);
@@ -963,14 +1395,33 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 		if (g_readerEdit != NULL) {
 			RemoveWindowSubclass(g_readerEdit, ReaderEditSubclassProc, 1);
 		}
+		if (g_readerOpenButton != NULL) {
+			RemoveWindowSubclass(g_readerOpenButton, ReaderButtonSubclassProc, 11);
+		}
+		if (g_readerLibraryButton != NULL) {
+			RemoveWindowSubclass(g_readerLibraryButton, ReaderButtonSubclassProc, 12);
+		}
+		if (g_readerFontMinusButton != NULL) {
+			RemoveWindowSubclass(g_readerFontMinusButton, ReaderButtonSubclassProc, 13);
+		}
+		if (g_readerFontPlusButton != NULL) {
+			RemoveWindowSubclass(g_readerFontPlusButton, ReaderButtonSubclassProc, 14);
+		}
+		if (g_readerPinButton != NULL) {
+			RemoveWindowSubclass(g_readerPinButton, ReaderButtonSubclassProc, 15);
+		}
 		g_readerWindow = NULL;
 		g_readerEdit = NULL;
 		g_readerOpenButton = NULL;
 		g_readerLibraryButton = NULL;
 		g_readerFontMinusButton = NULL;
 		g_readerFontPlusButton = NULL;
+		g_readerFontSizeLabel = NULL;
 		g_readerOpacityCombo = NULL;
+		g_readerPinButton = NULL;
 		g_readerStatus = NULL;
+		g_readerWordInfo = NULL;
+		g_readerProgressInfo = NULL;
 		if (g_readerTextFont != NULL && g_readerTextFont != GetStockObject(DEFAULT_GUI_FONT)) {
 			DeleteObject(g_readerTextFont);
 		}
@@ -979,6 +1430,11 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 			DeleteObject(g_readerUiFont);
 		}
 		g_readerUiFont = NULL;
+		if (g_readerTitleFont != NULL &&
+			g_readerTitleFont != GetStockObject(DEFAULT_GUI_FONT)) {
+			DeleteObject(g_readerTitleFont);
+		}
+		g_readerTitleFont = NULL;
 		if (g_readerBackgroundBrush != NULL) {
 			DeleteObject(g_readerBackgroundBrush);
 			g_readerBackgroundBrush = NULL;

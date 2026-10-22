@@ -1,5 +1,27 @@
 # Development Log
 
+## 2026-10-22: Reader UI Redesign
+
+### Design
+*   Added the Stark Windows reader decision brief and visual specification in `docs/ui-redesign.md`.
+*   Kept the native Win32 C/C++, RichEdit, tray, global hotkeys, and business logic.
+
+### Implementation
+*   Reworked the command deck into file, typography, and display groups.
+*   Added owner-drawn native buttons with hover, pressed, disabled, and keyboard-focus states.
+*   Added a separate title/count/progress row.
+*   Added a centered, maximum-width reading canvas with additional text insets.
+*   Added system light/dark/high-contrast themes and live response to system theme changes.
+
+## 2026-10-22: Window Pinning and Responsive Reader Information
+
+### Changes
+*   Added owner-drawn pin buttons with independent persisted always-on-top state for reader and bookshelf.
+*   Extended reader opacity choices down to 10%.
+*   Split the reader toolbar into action and information rows with compact-window sizing.
+*   Added live book title, non-whitespace character count, and scroll-based reading progress.
+*   Removed encoding information from the reading status line.
+
 ## 2026-10-21: Bookshelf Catalog and Portable Library
 
 ### Summary

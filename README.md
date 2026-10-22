@@ -3,7 +3,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
 ![License](https://img.shields.io/badge/license-GPL-green)
 ![Build](https://img.shields.io/badge/build-VS2022-purple)
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
+![Version](https://img.shields.io/badge/version-0.3.0-blue)
 
 **Vitrite** is a lightweight Windows utility with a built-in, automatically wrapping TXT reader. It can also adjust the transparency of almost any visible window using global hotkeys and toggle "Always on Top" for any window.
 
@@ -25,6 +25,13 @@ This version has been rewritten to meet modern Windows standards:
 *   **🔎 Pinyin and Author Views**: Sort titles by Chinese pinyin or group/filter the catalog by author.
 *   **📦 One-click Portable Library**: Export the executable, books, authors, favorites, and configuration into a ZIP that runs immediately after extraction.
 *   **🪟 Rounded UI**: Native Windows 11 corners with a Windows 10 fallback.
+*   **📌 Window Pinning**: Reader and bookshelf each provide a pin button for toggling always-on-top behavior.
+*   **📊 Responsive Reading Info**: Book title, character count, and reading progress remain visible while resizing.
+*   **🔅 Lower Opacity**: Reader opacity can now be reduced to 10%.
+*   **🎨 Native Custom UI**: Grouped file, typography, and display commands with hover, pressed, and keyboard-focus states.
+*   **🌗 System Themes**: Light, dark, and high-contrast reader surfaces follow Windows settings.
+
+See [docs/ui-redesign.md](docs/ui-redesign.md) for the complete reader UI brief and visual specification.
 *   **👁️ High-DPI Ready**: Full Per-Monitor V2 DPI awareness. The UI looks crisp on 4K screens and mixed-DPI multi-monitor setups.
 *   **🛡️ Crash Recovery**: Automatically restores the tray icon if Windows Explorer crashes or restarts.
 *   **🌓 Dark Mode Support**: The "About" dialog attempts to respect the system's dark mode preference (Windows 10/11).

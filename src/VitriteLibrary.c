@@ -32,6 +32,7 @@
 #define IDC_LIBRARY_SORT_LABEL 809
 #define IDC_LIBRARY_FILTER_LABEL 810
 #define IDC_LIBRARY_AUTHOR_LABEL 811
+#define IDC_LIBRARY_PIN 812
 
 #define IDM_LIBRARY_OPEN_BOOK 900
 #define IDM_LIBRARY_EDIT_AUTHOR 901
@@ -73,6 +74,7 @@ static HWND g_libraryStatus;
 static HWND g_librarySortLabel;
 static HWND g_libraryFilterLabel;
 static HWND g_libraryAuthorLabel;
+static HWND g_libraryPinButton;
 static HFONT g_libraryTitleFont;
 static HFONT g_libraryBodyFont;
 static HFONT g_librarySmallFont;
@@ -100,6 +102,7 @@ static int g_libraryHoverBook;
 static int g_libraryContextBook;
 static BOOL g_libraryClassRegistered;
 static BOOL g_bookViewClassRegistered;
+static BOOL g_libraryTopmost;
 #ifdef VITRITE_LIBRARY_TEST
 static int g_libraryTestExportStage;
 static BOOL g_libraryTestCompressCreateSuccess;
@@ -240,6 +243,8 @@ static void LoadLibraryRoot(void) {
 	}
 	GetPrivateProfileStringW(L"Library", L"AuthorFilter", L"",
 		g_libraryAuthorFilter, 128, settings);
+	g_libraryTopmost = GetPrivateProfileIntW(L"Library", L"AlwaysOnTop", 0,
+		settings) != 0;
 	if (GetPortableLibraryRoot(g_libraryRoot, MAX_PATH)) {
 		return;
 	}
@@ -264,6 +269,8 @@ static void SaveLibraryRoot(void) {
 	WritePrivateProfileStringW(L"Library", L"FavoriteFilter", value, settings);
 	WritePrivateProfileStringW(L"Library", L"AuthorFilter",
 		g_libraryAuthorFilter, settings);
+	WritePrivateProfileStringW(L"Library", L"AlwaysOnTop",
+		g_libraryTopmost ? L"1" : L"0", settings);
 }
 
 static void LoadLibraryWindowRect(void) {
@@ -470,6 +477,15 @@ static void UpdateLibraryStatus(void) {
 	StringCchPrintfW(text, 256, L"%d 本显示 / 共 %d 本  ·  书库：%s",
 		g_visibleBookCount, g_bookCount, g_libraryRoot);
 	SetWindowTextW(g_libraryStatus, text);
+}
+
+static void ToggleLibraryTopmost(void) {
+	g_libraryTopmost = !IsWindowPinnedTopmost(g_libraryWindow);
+	SetWindowPinnedTopmost(g_libraryWindow, g_libraryTopmost);
+	SaveLibraryRoot();
+	if (g_libraryPinButton != NULL) {
+		InvalidateRect(g_libraryPinButton, NULL, TRUE);
+	}
 }
 
 static void RefreshLibraryView(void) {
@@ -1002,7 +1018,7 @@ static void ApplyLibraryFonts(void) {
 		IDC_LIBRARY_IMPORT, IDC_LIBRARY_SET_PATH, IDC_LIBRARY_EXPORT,
 		IDC_LIBRARY_SORT, IDC_LIBRARY_FAVORITE_FILTER, IDC_LIBRARY_AUTHOR_FILTER,
 		IDC_LIBRARY_STATUS, IDC_LIBRARY_READER, IDC_LIBRARY_SORT_LABEL,
-		IDC_LIBRARY_FILTER_LABEL, IDC_LIBRARY_AUTHOR_LABEL
+		IDC_LIBRARY_FILTER_LABEL, IDC_LIBRARY_AUTHOR_LABEL, IDC_LIBRARY_PIN
 	};
 	int i;
 	for (i = 0; i < (int)(sizeof(controls) / sizeof(controls[0])); i++) {
@@ -1020,6 +1036,7 @@ static void LayoutLibraryWindow(void) {
 	int gap;
 	int top;
 	int rowHeight;
+	int pinSize;
 	int x;
 
 	if (g_libraryWindow == NULL || !GetClientRect(g_libraryWindow, &client)) {
@@ -1029,6 +1046,7 @@ static void LayoutLibraryWindow(void) {
 	padding = LibraryScale(g_libraryWindow, 14);
 	gap = LibraryScale(g_libraryWindow, 8);
 	rowHeight = LibraryScale(g_libraryWindow, 32);
+	pinSize = LibraryScale(g_libraryWindow, 34);
 	top = LibraryScale(g_libraryWindow, 10);
 	x = padding;
 
@@ -1043,6 +1061,8 @@ static void LayoutLibraryWindow(void) {
 	x += LibraryScale(g_libraryWindow, 142) + gap;
 	MoveWindow(g_libraryReaderButton, x, top, LibraryScale(g_libraryWindow, 88),
 		rowHeight, TRUE);
+	MoveWindow(g_libraryPinButton, width - padding - pinSize, top,
+		pinSize, rowHeight, TRUE);
 
 	top += rowHeight + LibraryScale(g_libraryWindow, 9);
 	x = padding;
@@ -1697,6 +1717,10 @@ static void CreateLibraryControls(HWND hwnd) {
 	g_libraryReaderButton = CreateWindowExW(0, L"BUTTON", L"阅读器",
 		WS_CHILD | WS_VISIBLE | WS_TABSTOP, 0, 0, 0, 0, hwnd,
 		(HMENU)(INT_PTR)IDC_LIBRARY_READER, g_libraryInstance, NULL);
+	g_libraryPinButton = CreateWindowExW(0, L"BUTTON", L"固定在最前",
+		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_LIBRARY_PIN,
+		g_libraryInstance, NULL);
 	g_librarySortLabel = CreateWindowExW(0, L"STATIC", L"排序",
 		WS_CHILD | WS_VISIBLE | SS_LEFT, 0, 0, 0, 0, hwnd,
 		(HMENU)(INT_PTR)IDC_LIBRARY_SORT_LABEL, g_libraryInstance, NULL);
@@ -1729,6 +1753,7 @@ static void CreateLibraryControls(HWND hwnd) {
 	PopulateLibraryCombos();
 	ApplyLibraryFonts();
 	LayoutLibraryWindow();
+	SetWindowPinnedTopmost(hwnd, g_libraryTopmost);
 	RefreshLibraryView();
 }
 
@@ -1775,6 +1800,21 @@ static LRESULT CALLBACK LibraryWindowProc(HWND hwnd, UINT message,
 		SetBkMode((HDC)wParam, TRANSPARENT);
 		SetTextColor((HDC)wParam, LIBRARY_SUBTLE_COLOR);
 		return (LRESULT)g_libraryToolbarBrush;
+	case WM_DRAWITEM:
+	{
+		DRAWITEMSTRUCT* item = (DRAWITEMSTRUCT*)lParam;
+		if (item != NULL && item->CtlID == IDC_LIBRARY_PIN) {
+			DrawPinButton(item, IsWindowPinnedTopmost(hwnd));
+			return TRUE;
+		}
+		break;
+	}
+	case WM_WINDOWPOSCHANGED:
+		g_libraryTopmost = IsWindowPinnedTopmost(hwnd);
+		if (g_libraryPinButton != NULL) {
+			InvalidateRect(g_libraryPinButton, NULL, FALSE);
+		}
+		break;
 	case WM_DROPFILES:
 		ImportDroppedFiles(hwnd, (HDROP)wParam);
 		return 0;
@@ -1792,6 +1832,9 @@ static LRESULT CALLBACK LibraryWindowProc(HWND hwnd, UINT message,
 		case IDC_LIBRARY_READER:
 			BringTextReaderToFront();
 			ShowWindow(hwnd, SW_HIDE);
+			return 0;
+		case IDC_LIBRARY_PIN:
+			ToggleLibraryTopmost();
 			return 0;
 		case IDC_LIBRARY_SORT:
 			if (HIWORD(wParam) == CBN_SELCHANGE) {
@@ -1834,6 +1877,7 @@ static LRESULT CALLBACK LibraryWindowProc(HWND hwnd, UINT message,
 	case WM_DESTROY:
 		DragAcceptFiles(hwnd, FALSE);
 		g_libraryWindow = NULL;
+		g_libraryPinButton = NULL;
 		return 0;
 	}
 	return DefWindowProcW(hwnd, message, wParam, lParam);
