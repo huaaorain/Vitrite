@@ -3,7 +3,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
 ![License](https://img.shields.io/badge/license-GPL-green)
 ![Build](https://img.shields.io/badge/build-VS2022-purple)
-![Version](https://img.shields.io/badge/version-0.3.0-blue)
+![Version](https://img.shields.io/badge/version-0.4.0-blue)
 
 **Vitrite** is a lightweight Windows utility with a built-in, automatically wrapping TXT reader. It can also adjust the transparency of almost any visible window using global hotkeys and toggle "Always on Top" for any window.
 
@@ -29,7 +29,11 @@ This version has been rewritten to meet modern Windows standards:
 *   **📊 Responsive Reading Info**: Book title, character count, and reading progress remain visible while resizing.
 *   **🔅 Lower Opacity**: Reader opacity can now be reduced to 10%.
 *   **🎨 Native Custom UI**: Grouped file, typography, and display commands with hover, pressed, and keyboard-focus states.
-*   **🌗 System Themes**: Light, dark, and high-contrast reader surfaces follow Windows settings.
+*   **🌓 High Contrast**: Reader surfaces and focus states honor Windows high-contrast system colors.
+*   **🪟 White or Transparent**: Switch between a clean white reader surface and a color-key transparent surface with automatic light/dark text selection.
+*   **🔄 Opacity Sync**: The opacity selector mirrors changes made through global shortcuts or the menu.
+*   **🎛️ Ctrl+Wheel Opacity**: Adjust opacity in 10% steps directly from the reader.
+*   **🖱️ Interactive Transparency**: Transparent backgrounds retain text selection, right-click, and scrolling; wheel scrolling is faster and consistent.
 
 See [docs/ui-redesign.md](docs/ui-redesign.md) for the complete reader UI brief and visual specification.
 *   **👁️ High-DPI Ready**: Full Per-Monitor V2 DPI awareness. The UI looks crisp on 4K screens and mixed-DPI multi-monitor setups.

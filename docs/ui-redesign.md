@@ -124,19 +124,22 @@ a narrow command deck, an editorial title rail, and a paper-like text canvas.
 
 | Token | Value |
 | :--- | :--- |
-| Window background | `#F4F1EB` |
-| Header | `#FBF9F4` |
-| Reading surface | `#FFFDF8` |
-| Primary text | `#292722` |
-| Secondary text | `#6C665D` |
-| Accent | `#7358B9` |
-| Accent text | `#FFFFFF` |
-| Button | `#F1ECE3` |
-| Button hover | `#E8E0D4` |
-| Border | `#D8D0C3` |
-| Separator | `#DED7CB` |
+| Window background | `#FFFFFF` |
+| Header | `#FFFFFF` |
+| Reading surface | `#FFFFFF` |
+| Primary text | `#1D1D1D` |
+| Secondary text | `#6D6D6D` |
+| Accent | `#F2F2F2` |
+| Accent text | `#161616` |
+| Button | `#FFFFFF` |
+| Button hover | `#F3F3F3` |
+| Border | `#E0E0E0` |
+| Separator | `#ECECEC` |
 
 ### Dark Theme Tokens
+
+Normal builds use the white surface above. The dark tokens remain available for
+forced visual QA and future user-selectable themes; purple accents were removed.
 
 | Token | Value |
 | :--- | :--- |
@@ -164,6 +167,19 @@ When Windows High Contrast is active:
 - Borders: `COLOR_WINDOWTEXT`.
 - Disable decorative tonal fills.
 
+### Reader Background Modes
+
+- **White:** opaque white window, header, reading surface, and white command buttons.
+- **Transparent:** a color key makes the reader background reveal the desktop or
+  window behind it while text and command controls remain visible.
+- In transparent mode, the reader samples the backdrop in a 5×5 grid, chooses the
+  dominant luminance band, and switches reading text to high-contrast black or white.
+- The sampled text color is refreshed when the window moves, resizes, or the timer
+  detects a changed backdrop.
+- The global opacity animation preserves the transparent color key.
+- The RichEdit client border is removed; Windows 11 also receives the DWM
+  no-border preference where available.
+
 ### Component Contract
 
 - Buttons are 32–36 epx high and use 7 epx corner radius.
@@ -184,6 +200,16 @@ When Windows High Contrast is active:
 - Minimum opacity is 10%.
 - Progress updates after scrolling, resizing, and font changes.
 - Light, dark, and high-contrast states retain readable text and visible focus.
+
+### 0.4.0 Interaction Update
+
+- A nearly transparent hit layer sits over the reading canvas in transparent mode,
+  so color-key pixels remain clickable while still revealing the backdrop.
+- Mouse down, drag, double-click, context menu, and wheel messages are forwarded
+  to the RichEdit control.
+- Plain wheel scrolling advances three lines per notch.
+- `Ctrl+wheel` adjusts opacity in 10-percent steps.
+- The documented 90% shortcut now produces 90%, not 100%.
 
 ### Implementation Evidence
 

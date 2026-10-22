@@ -4,12 +4,14 @@
 #include <richedit.h>
 #include <shellapi.h>
 #include <strsafe.h>
+#include <stdlib.h>
 #include "resource.h"
 #include "VitriteReader.h"
 #include "VitriteLibrary.h"
 #include "VitriteUi.h"
 
 #define READER_CLASS_NAME L"VitriteTextReaderWindow"
+#define READER_HIT_CLASS_NAME L"VitriteReaderHitLayer"
 #define READER_TITLE L"Vitrite TXT 阅读器"
 #define READER_SETTINGS_NAME L"reader.ini"
 #define READER_TOOLBAR_HEIGHT 108
@@ -27,11 +29,15 @@
 #define IDC_READER_PROGRESS 609
 #define IDC_READER_PIN 610
 #define IDC_READER_FONT_SIZE 611
+#define IDC_READER_BACKGROUND 612
+#define IDC_READER_HIT_LAYER 613
 
 #define IDM_READER_OPEN 700
 #define IDM_READER_FONT_MINUS 701
 #define IDM_READER_FONT_PLUS 702
 #define IDM_READER_LIBRARY 703
+#define IDM_READER_BACKGROUND_WHITE 704
+#define IDM_READER_BACKGROUND_TRANSPARENT 705
 #define IDM_READER_OPACITY_BASE 710
 #define IDM_READER_EXIT 799
 
@@ -39,6 +45,10 @@
 #define READER_TOOLBAR_COLOR RGB(242, 238, 229)
 #define READER_TEXT_COLOR RGB(42, 40, 37)
 #define READER_SUBTLE_COLOR RGB(107, 101, 92)
+#define READER_BACKGROUND_WHITE 0
+#define READER_BACKGROUND_TRANSPARENT 1
+#define READER_TRANSPARENT_KEY RGB(1, 2, 3)
+#define TIMER_READER_SYNC 2
 
 static HINSTANCE g_readerInstance;
 static HMODULE g_richEditLibrary;
@@ -54,6 +64,8 @@ static HWND g_readerStatus;
 static HWND g_readerWordInfo;
 static HWND g_readerProgressInfo;
 static HWND g_readerPinButton;
+static HWND g_readerBackgroundCombo;
+static HWND g_readerHitLayer;
 static HFONT g_readerTextFont;
 static HFONT g_readerUiFont;
 static HFONT g_readerTitleFont;
@@ -61,6 +73,7 @@ static HBRUSH g_readerBackgroundBrush;
 static HBRUSH g_readerToolbarBrush;
 static VITRITE_UI_THEME g_readerTheme;
 static BOOL g_readerThemeReady;
+static COLORREF g_readerTransparentTextColor;
 static int g_readerSeparator1;
 static int g_readerSeparator2;
 static WCHAR g_readerCurrentPath[MAX_PATH];
@@ -70,8 +83,16 @@ static SIZE_T g_readerCharacterCount;
 static int g_readerFontPoints = 16;
 static int g_readerOpacityPercent = 100;
 static BOOL g_readerTopmost;
+static int g_readerBackgroundMode;
 static UINT g_readerDpi = 96;
 static BOOL g_readerClassRegistered;
+static BOOL g_readerHitClassRegistered;
+
+static void ApplyReaderSystemTheme(void);
+static void ApplyReaderOpacity(int percent);
+static void UpdateTransparentTextColor(void);
+static void LayoutReaderWindow(void);
+static void PositionReaderHitLayer(void);
 
 typedef enum READER_BUTTON_STYLE {
 	READER_BUTTON_PRIMARY,
@@ -165,6 +186,12 @@ static void LoadReaderSettings(void) {
 		g_readerOpacityPercent = 100;
 	}
 	g_readerTopmost = GetPrivateProfileIntW(L"Reader", L"AlwaysOnTop", 0, path) != 0;
+	g_readerBackgroundMode = GetPrivateProfileIntW(L"Reader", L"BackgroundMode",
+		READER_BACKGROUND_WHITE, path);
+	if (g_readerBackgroundMode != READER_BACKGROUND_WHITE &&
+		g_readerBackgroundMode != READER_BACKGROUND_TRANSPARENT) {
+		g_readerBackgroundMode = READER_BACKGROUND_WHITE;
+	}
 
 	memset(&g_readerSavedRect, 0, sizeof(g_readerSavedRect));
 	g_readerSavedRect.left = GetPrivateProfileIntW(L"Window", L"Left", 0, path);
@@ -201,6 +228,8 @@ static void SaveReaderSettings(void) {
 		g_readerTopmost = IsWindowPinnedTopmost(g_readerWindow);
 	}
 	WriteReaderProfileInt(L"Reader", L"AlwaysOnTop", g_readerTopmost ? 1 : 0, path);
+	WriteReaderProfileInt(L"Reader", L"BackgroundMode",
+		g_readerBackgroundMode, path);
 }
 
 static WCHAR* NormalizeReaderText(const WCHAR* source, SIZE_T sourceLength, SIZE_T* outputLength) {
@@ -502,7 +531,8 @@ static void RecreateReaderFonts(HWND hwnd) {
 	logFont.lfCharSet = DEFAULT_CHARSET;
 	logFont.lfOutPrecision = OUT_DEFAULT_PRECIS;
 	logFont.lfClipPrecision = CLIP_DEFAULT_PRECIS;
-	logFont.lfQuality = CLEARTYPE_QUALITY;
+	logFont.lfQuality = g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT
+		? ANTIALIASED_QUALITY : CLEARTYPE_QUALITY;
 	logFont.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
 	StringCchCopyW(logFont.lfFaceName, LF_FACESIZE, L"Microsoft YaHei UI");
 	g_readerTextFont = CreateFontIndirectW(&logFont);
@@ -515,7 +545,8 @@ static void RecreateReaderFonts(HWND hwnd) {
 	logFont.lfHeight = uiHeight;
 	logFont.lfWeight = FW_NORMAL;
 	logFont.lfCharSet = DEFAULT_CHARSET;
-	logFont.lfQuality = CLEARTYPE_QUALITY;
+	logFont.lfQuality = g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT
+		? ANTIALIASED_QUALITY : CLEARTYPE_QUALITY;
 	logFont.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
 	StringCchCopyW(logFont.lfFaceName, LF_FACESIZE, L"Microsoft YaHei UI");
 	g_readerUiFont = CreateFontIndirectW(&logFont);
@@ -527,7 +558,8 @@ static void RecreateReaderFonts(HWND hwnd) {
 	logFont.lfHeight = -MulDiv(15, (int)dpi, 72);
 	logFont.lfWeight = FW_SEMIBOLD;
 	logFont.lfCharSet = DEFAULT_CHARSET;
-	logFont.lfQuality = CLEARTYPE_QUALITY;
+	logFont.lfQuality = g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT
+		? ANTIALIASED_QUALITY : CLEARTYPE_QUALITY;
 	logFont.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
 	StringCchCopyW(logFont.lfFaceName, LF_FACESIZE, L"Microsoft YaHei UI");
 	g_readerTitleFont = CreateFontIndirectW(&logFont);
@@ -553,7 +585,9 @@ static void ApplyReaderFontAndColors(void) {
 		GetVitriteUiTheme(g_readerWindow, &g_readerTheme);
 		g_readerThemeReady = TRUE;
 	}
-	format.crTextColor = g_readerTheme.text;
+	format.crTextColor = (g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT &&
+		!g_readerTheme.highContrast)
+		? g_readerTransparentTextColor : g_readerTheme.text;
 	StringCchCopyW(format.szFaceName, LF_FACESIZE, L"Microsoft YaHei UI");
 	SendMessageW(g_readerEdit, EM_SETCHARFORMAT, SCF_ALL, (LPARAM)&format);
 }
@@ -663,6 +697,7 @@ static void ApplyReaderFontsToControls(void) {
 	SendMessageW(g_readerFontPlusButton, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	SendMessageW(g_readerFontSizeLabel, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	SendMessageW(g_readerOpacityCombo, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
+	SendMessageW(g_readerBackgroundCombo, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	SendMessageW(g_readerStatus, WM_SETFONT, (WPARAM)g_readerTitleFont, TRUE);
 	SendMessageW(g_readerWordInfo, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
 	SendMessageW(g_readerProgressInfo, WM_SETFONT, (WPARAM)g_readerUiFont, TRUE);
@@ -799,11 +834,16 @@ static void ApplyReaderSystemTheme(void) {
 	if (g_readerToolbarBrush != NULL) {
 		DeleteObject(g_readerToolbarBrush);
 	}
-	g_readerBackgroundBrush = CreateSolidBrush(g_readerTheme.windowBackground);
-	g_readerToolbarBrush = CreateSolidBrush(g_readerTheme.headerBackground);
+	g_readerBackgroundBrush = CreateSolidBrush(
+		g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT
+			? READER_TRANSPARENT_KEY : g_readerTheme.windowBackground);
+	g_readerToolbarBrush = CreateSolidBrush(
+		g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT
+			? READER_TRANSPARENT_KEY : g_readerTheme.headerBackground);
 	if (g_readerEdit != NULL) {
 		SendMessageW(g_readerEdit, EM_SETBKGNDCOLOR, 0,
-			(LPARAM)g_readerTheme.surfaceBackground);
+			(LPARAM)(g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT
+				? READER_TRANSPARENT_KEY : g_readerTheme.surfaceBackground));
 	}
 	ApplyWindowDarkTitleBar(g_readerWindow,
 		g_readerTheme.dark && !g_readerTheme.highContrast);
@@ -817,9 +857,144 @@ static void ApplyReaderSystemTheme(void) {
 		setWindowTheme(g_readerOpacityCombo,
 			g_readerTheme.dark && !g_readerTheme.highContrast
 				? L"DarkMode_Explorer" : NULL, NULL);
+		if (g_readerEdit != NULL && !g_readerTheme.highContrast) {
+			setWindowTheme(g_readerEdit, L"", L"");
+		}
 	}
 	RedrawWindow(g_readerWindow, NULL, NULL,
 		RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+}
+
+static COLORREF ReaderInformationTextColor(void) {
+	if (g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT &&
+		!g_readerTheme.highContrast) {
+		return g_readerTransparentTextColor;
+	}
+	return g_readerTheme.text;
+}
+
+static void SelectReaderBackgroundCombo(void) {
+	if (g_readerBackgroundCombo != NULL) {
+		SendMessageW(g_readerBackgroundCombo, CB_SETCURSEL,
+			g_readerBackgroundMode, 0);
+	}
+}
+
+static void ApplyReaderBackgroundMode(int mode) {
+	if (mode != READER_BACKGROUND_WHITE &&
+		mode != READER_BACKGROUND_TRANSPARENT) {
+		mode = READER_BACKGROUND_WHITE;
+	}
+	g_readerBackgroundMode = mode;
+	SelectReaderBackgroundCombo();
+	RecreateReaderFonts(g_readerWindow);
+	ApplyReaderSystemTheme();
+	ApplyReaderOpacity(g_readerOpacityPercent);
+	LayoutReaderWindow();
+	if (g_readerEdit != NULL) {
+		ApplyReaderFontAndColors();
+		InvalidateRect(g_readerEdit, NULL, TRUE);
+		UpdateWindow(g_readerEdit);
+	}
+	if (mode == READER_BACKGROUND_TRANSPARENT) {
+		UpdateTransparentTextColor();
+	}
+	SaveReaderSettings();
+}
+
+static int LuminanceOfColor(COLORREF color) {
+	return (GetRValue(color) * 299 + GetGValue(color) * 587 +
+		GetBValue(color) * 114) / 1000;
+}
+
+static void UpdateTransparentTextColor(void) {
+	RECT client;
+	POINT point;
+	HDC screen;
+	int xs[5];
+	int ys[5];
+	int colors[25];
+	int luminances[25];
+	int count = 0;
+	int i;
+	int j;
+	int sumRed = 0;
+	int sumGreen = 0;
+	int sumBlue = 0;
+	int median;
+	int sampled;
+	COLORREF chosen;
+
+	if (g_readerWindow == NULL ||
+		g_readerBackgroundMode != READER_BACKGROUND_TRANSPARENT ||
+		g_readerTheme.highContrast) {
+		return;
+	}
+	GetClientRect(g_readerWindow, &client);
+	if (client.right < 40 || client.bottom < 140) {
+		return;
+	}
+	for (i = 0; i < 5; i++) {
+		xs[i] = client.right * (i + 1) / 6;
+		ys[i] = ReaderScale(g_readerWindow, READER_TOOLBAR_HEIGHT) +
+			(client.bottom - ReaderScale(g_readerWindow, READER_TOOLBAR_HEIGHT)) *
+				(i + 1) / 6;
+	}
+	screen = GetDC(NULL);
+	if (screen == NULL) {
+		return;
+	}
+	for (i = 0; i < 5; i++) {
+		for (j = 0; j < 5; j++) {
+			point.x = xs[i];
+			point.y = ys[j];
+			if (ClientToScreen(g_readerWindow, &point)) {
+				COLORREF color = GetPixel(screen, point.x, point.y);
+				if (color != CLR_INVALID && color != READER_TRANSPARENT_KEY) {
+					colors[count] = (int)color;
+					luminances[count] = LuminanceOfColor(color);
+					count++;
+				}
+			}
+		}
+	}
+	ReleaseDC(NULL, screen);
+	if (count < 5) {
+		return;
+	}
+	for (i = 1; i < count; i++) {
+		int value = luminances[i];
+		int color = colors[i];
+		for (j = i; j > 0 && luminances[j - 1] > value; j--) {
+			luminances[j] = luminances[j - 1];
+			colors[j] = colors[j - 1];
+		}
+		luminances[j] = value;
+		colors[j] = color;
+	}
+	median = luminances[count / 2];
+	sampled = 0;
+	for (i = 0; i < count; i++) {
+		if (abs(luminances[i] - median) <= 32) {
+			sumRed += GetRValue((COLORREF)colors[i]);
+			sumGreen += GetGValue((COLORREF)colors[i]);
+			sumBlue += GetBValue((COLORREF)colors[i]);
+			sampled++;
+		}
+	}
+	if (sampled > 0) {
+		COLORREF average = RGB(sumRed / sampled, sumGreen / sampled,
+			sumBlue / sampled);
+		median = LuminanceOfColor(average);
+	}
+	chosen = median >= 145 ? RGB(20, 20, 20) : RGB(245, 245, 245);
+	if (chosen != g_readerTransparentTextColor) {
+		g_readerTransparentTextColor = chosen;
+		ApplyReaderFontAndColors();
+		InvalidateRect(g_readerWindow, NULL, FALSE);
+		RedrawWindow(g_readerWindow, NULL, NULL,
+			RDW_INVALIDATE | RDW_ALLCHILDREN);
+	}
 }
 
 static void LayoutReaderWindow(void) {
@@ -836,6 +1011,7 @@ static void LayoutReaderWindow(void) {
 	int fontWidth;
 	int fontSizeWidth;
 	int opacityWidth;
+	int backgroundWidth;
 	int pinSize;
 	int wordWidth;
 	int progressWidth;
@@ -866,6 +1042,7 @@ static void LayoutReaderWindow(void) {
 	fontWidth = ReaderScale(g_readerWindow, compact ? 34 : 36);
 	fontSizeWidth = ReaderScale(g_readerWindow, compact ? 48 : 54);
 	opacityWidth = ReaderScale(g_readerWindow, compact ? 96 : 112);
+	backgroundWidth = ReaderScale(g_readerWindow, compact ? 92 : 104);
 	pinSize = ReaderScale(g_readerWindow, 34);
 	wordWidth = ReaderScale(g_readerWindow, compact ? 108 : 120);
 	progressWidth = ReaderScale(g_readerWindow, compact ? 104 : 116);
@@ -887,7 +1064,10 @@ static void LayoutReaderWindow(void) {
 	MoveWindow(g_readerFontPlusButton, x, y, fontWidth, buttonHeight, TRUE);
 	typeEnd = x + fontWidth;
 	g_readerSeparator2 = typeEnd + groupGap / 2;
-	x = width - padding - pinSize - gap - opacityWidth;
+	x = width - padding - pinSize - gap - opacityWidth - gap - backgroundWidth;
+	MoveWindow(g_readerBackgroundCombo, x, y + ReaderScale(g_readerWindow, 2),
+		backgroundWidth, ReaderScale(g_readerWindow, 280), TRUE);
+	x += backgroundWidth + gap;
 	MoveWindow(g_readerOpacityCombo, x, y + ReaderScale(g_readerWindow, 2),
 		opacityWidth, ReaderScale(g_readerWindow, 280), TRUE);
 	MoveWindow(g_readerPinButton, width - padding - pinSize, y,
@@ -912,6 +1092,7 @@ static void LayoutReaderWindow(void) {
 	MoveWindow(g_readerEdit, readingX, toolbarHeight,
 		readingWidth,
 		max(0, height - toolbarHeight - padding), TRUE);
+	PositionReaderHitLayer();
 	if (g_readerEdit != NULL && GetClientRect(g_readerEdit, &editorRect)) {
 		RECT formatRect;
 		formatRect.left = ReaderScale(g_readerWindow, 20);
@@ -923,6 +1104,24 @@ static void LayoutReaderWindow(void) {
 		SendMessageW(g_readerEdit, EM_SETRECT, 0, (LPARAM)&formatRect);
 	}
 	InvalidateRect(g_readerWindow, NULL, TRUE);
+}
+
+static void PositionReaderHitLayer(void) {
+	RECT editRect;
+	if (g_readerHitLayer == NULL || g_readerEdit == NULL) {
+		return;
+	}
+	if (g_readerBackgroundMode != READER_BACKGROUND_TRANSPARENT ||
+		!IsWindowVisible(g_readerWindow)) {
+		ShowWindow(g_readerHitLayer, SW_HIDE);
+		return;
+	}
+	GetWindowRect(g_readerEdit, &editRect);
+	editRect.right -= GetSystemMetrics(SM_CXVSCROLL);
+	SetWindowPos(g_readerHitLayer, HWND_TOP, editRect.left, editRect.top,
+		max(0, editRect.right - editRect.left),
+		max(0, editRect.bottom - editRect.top),
+		SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
 }
 
 static int ReaderOpacityFromCombo(void) {
@@ -962,8 +1161,32 @@ static void ApplyReaderOpacity(int percent) {
 	if (g_readerWindow != NULL) {
 		style = GetWindowLongPtrW(g_readerWindow, GWL_EXSTYLE);
 		SetWindowLongPtrW(g_readerWindow, GWL_EXSTYLE, style | WS_EX_LAYERED);
-		SetLayeredWindowAttributes(g_readerWindow, 0,
-			(BYTE)MulDiv(percent, 255, 100), LWA_ALPHA);
+		SetLayeredWindowAttributes(g_readerWindow,
+			g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT
+				? READER_TRANSPARENT_KEY : 0,
+			(BYTE)MulDiv(percent, 255, 100),
+			LWA_ALPHA | (g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT
+				? LWA_COLORKEY : 0));
+	}
+}
+
+static void SyncReaderOpacityFromWindow(void) {
+	COLORREF colorKey = 0;
+	BYTE alpha = 255;
+	DWORD flags = 0;
+	int percent;
+
+	if (g_readerWindow == NULL ||
+		!GetLayeredWindowAttributes(g_readerWindow, &colorKey, &alpha, &flags) ||
+		(flags & LWA_ALPHA) == 0) {
+		return;
+	}
+	percent = ((int)alpha * 100 + 127) / 255;
+	percent = ((percent + 5) / 10) * 10;
+	percent = max(10, min(100, percent));
+	if (percent != g_readerOpacityPercent) {
+		g_readerOpacityPercent = percent;
+		SelectReaderOpacityCombo(percent);
 	}
 }
 
@@ -982,6 +1205,18 @@ static void PopulateReaderOpacityCombo(void) {
 		}
 	}
 	SelectReaderOpacityCombo(g_readerOpacityPercent);
+}
+
+static int ReaderBackgroundFromCombo(void) {
+	int index = (int)SendMessageW(g_readerBackgroundCombo, CB_GETCURSEL, 0, 0);
+	return index == READER_BACKGROUND_TRANSPARENT
+		? READER_BACKGROUND_TRANSPARENT : READER_BACKGROUND_WHITE;
+}
+
+static void PopulateReaderBackgroundCombo(void) {
+	SendMessageW(g_readerBackgroundCombo, CB_ADDSTRING, 0, (LPARAM)L"白色底色");
+	SendMessageW(g_readerBackgroundCombo, CB_ADDSTRING, 0, (LPARAM)L"透明底色");
+	SelectReaderBackgroundCombo();
 }
 
 static void ShowReaderLoadError(DWORD errorCode) {
@@ -1088,6 +1323,48 @@ static void ChangeReaderFont(int delta) {
 	SetFocus(g_readerEdit);
 }
 
+static LRESULT CALLBACK ReaderHitLayerProc(HWND hwnd, UINT message,
+	WPARAM wParam, LPARAM lParam) {
+	switch (message) {
+	case WM_ERASEBKGND:
+		return 1;
+	case WM_PAINT:
+	{
+		PAINTSTRUCT paint;
+		BeginPaint(hwnd, &paint);
+		EndPaint(hwnd, &paint);
+		return 0;
+	}
+	case WM_NCHITTEST:
+		return HTCLIENT;
+	case WM_SETCURSOR:
+		SetCursor(LoadCursorW(NULL, IDC_IBEAM));
+		return TRUE;
+	case WM_MOUSEWHEEL:
+		if (g_readerEdit != NULL) {
+			SendMessageW(g_readerEdit, message, wParam, lParam);
+		}
+		return 0;
+	case WM_LBUTTONDOWN:
+		if (g_readerEdit != NULL) {
+			SetForegroundWindow(g_readerWindow);
+			SetFocus(g_readerEdit);
+			SendMessageW(g_readerEdit, message, wParam, lParam);
+		}
+		return 0;
+	case WM_LBUTTONUP:
+	case WM_LBUTTONDBLCLK:
+	case WM_MOUSEMOVE:
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONUP:
+		if (g_readerEdit != NULL) {
+			SendMessageW(g_readerEdit, message, wParam, lParam);
+		}
+		return 0;
+	}
+	return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
 static LRESULT CALLBACK ReaderEditSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
 	LPARAM lParam, UINT_PTR subclassId, DWORD_PTR referenceData) {
 	(void)subclassId;
@@ -1110,8 +1387,19 @@ static LRESULT CALLBACK ReaderEditSubclassProc(HWND hwnd, UINT message, WPARAM w
 			ChangeReaderFont(-1);
 			return 0;
 		}
-	} else if (message == WM_MOUSEWHEEL && GetKeyState(VK_CONTROL) < 0) {
-		ChangeReaderFont(GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 1 : -1);
+	} else if (message == WM_MOUSEWHEEL) {
+		int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+		if (GetKeyState(VK_CONTROL) < 0) {
+			int change = delta > 0 ? 10 : -10;
+			int percent = max(10, min(100, g_readerOpacityPercent + change));
+			ApplyReaderOpacity(percent);
+			SelectReaderOpacityCombo(percent);
+			SyncReaderOpacityFromWindow();
+			return 0;
+		}
+		SendMessageW(hwnd, EM_LINESCROLL, 0,
+			-(delta * 3) / WHEEL_DELTA);
+		UpdateReaderProgress();
 		return 0;
 	}
 	return DefSubclassProc(hwnd, message, wParam, lParam);
@@ -1141,6 +1429,10 @@ static void CreateReaderControls(HWND hwnd) {
 	g_readerOpacityCombo = CreateWindowExW(0, WC_COMBOBOXW, L"",
 		WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
 		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_OPACITY, g_readerInstance, NULL);
+	g_readerBackgroundCombo = CreateWindowExW(0, WC_COMBOBOXW, L"",
+		WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_BACKGROUND,
+		g_readerInstance, NULL);
 	g_readerPinButton = CreateWindowExW(0, L"BUTTON", L"固定在最前",
 		WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
 		0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_PIN,
@@ -1159,11 +1451,20 @@ static void CreateReaderControls(HWND hwnd) {
 
 	editStyle = WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | ES_MULTILINE |
 		ES_READONLY | ES_NOHIDESEL | ES_AUTOVSCROLL;
-	g_readerEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"RICHEDIT50W", L"",
+	g_readerEdit = CreateWindowExW(0, L"RICHEDIT50W", L"",
 		editStyle, 0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_READER_EDIT,
 		g_readerInstance, NULL);
+	g_readerHitLayer = CreateWindowExW(
+		WS_EX_LAYERED | WS_EX_TOOLWINDOW, READER_HIT_CLASS_NAME, L"",
+		WS_POPUP, 0, 0, 0, 0, hwnd, NULL, g_readerInstance, NULL);
+	if (g_readerHitLayer != NULL) {
+		SetLayeredWindowAttributes(g_readerHitLayer, 0, 1, LWA_ALPHA);
+		SetWindowLongPtrW(g_readerHitLayer, GWLP_ID, IDC_READER_HIT_LAYER);
+		ShowWindow(g_readerHitLayer, SW_HIDE);
+	}
 
 	PopulateReaderOpacityCombo();
+	PopulateReaderBackgroundCombo();
 	ApplyReaderSystemTheme();
 	ApplyReaderOpacity(g_readerOpacityPercent);
 	SendMessageW(g_readerEdit, EM_SETLIMITTEXT, 0x7FFFFFF0, 0);
@@ -1175,9 +1476,13 @@ static void CreateReaderControls(HWND hwnd) {
 	SetWindowSubclass(g_readerFontMinusButton, ReaderButtonSubclassProc, 13, 0);
 	SetWindowSubclass(g_readerFontPlusButton, ReaderButtonSubclassProc, 14, 0);
 	SetWindowSubclass(g_readerPinButton, ReaderButtonSubclassProc, 15, 0);
+	SetTimer(hwnd, TIMER_READER_SYNC, 250, NULL);
 	LayoutReaderWindow();
 	SetWindowPinnedTopmost(hwnd, g_readerTopmost);
 	UpdateReaderInformation();
+	if (g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT) {
+		UpdateTransparentTextColor();
+	}
 }
 
 static void BuildReaderMenu(HWND hwnd) {
@@ -1185,6 +1490,7 @@ static void BuildReaderMenu(HWND hwnd) {
 	HMENU fileMenu;
 	HMENU viewMenu;
 	HMENU opacityMenu;
+	HMENU backgroundMenu;
 	WCHAR text[32];
 	int percent;
 
@@ -1192,7 +1498,9 @@ static void BuildReaderMenu(HWND hwnd) {
 	fileMenu = CreatePopupMenu();
 	viewMenu = CreatePopupMenu();
 	opacityMenu = CreatePopupMenu();
-	if (menu == NULL || fileMenu == NULL || viewMenu == NULL || opacityMenu == NULL) {
+	backgroundMenu = CreatePopupMenu();
+	if (menu == NULL || fileMenu == NULL || viewMenu == NULL ||
+		opacityMenu == NULL || backgroundMenu == NULL) {
 		return;
 	}
 	AppendMenuW(fileMenu, MF_STRING, IDM_READER_OPEN, L"打开 TXT...\tCtrl+O");
@@ -1205,7 +1513,12 @@ static void BuildReaderMenu(HWND hwnd) {
 	}
 	AppendMenuW(viewMenu, MF_STRING, IDM_READER_FONT_PLUS, L"增大字体\tCtrl++");
 	AppendMenuW(viewMenu, MF_STRING, IDM_READER_FONT_MINUS, L"减小字体\tCtrl+-");
+	AppendMenuW(backgroundMenu, MF_STRING, IDM_READER_BACKGROUND_WHITE,
+		L"白色底色");
+	AppendMenuW(backgroundMenu, MF_STRING, IDM_READER_BACKGROUND_TRANSPARENT,
+		L"透明底色");
 	AppendMenuW(viewMenu, MF_SEPARATOR, 0, NULL);
+	AppendMenuW(viewMenu, MF_POPUP, (UINT_PTR)backgroundMenu, L"阅读底色");
 	AppendMenuW(viewMenu, MF_POPUP, (UINT_PTR)opacityMenu, L"不透明度");
 	AppendMenuW(menu, MF_POPUP, (UINT_PTR)fileMenu, L"文件");
 	AppendMenuW(menu, MF_POPUP, (UINT_PTR)viewMenu, L"视图");
@@ -1268,13 +1581,15 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 		HGDIOBJ oldPen = SelectObject(dc, pen);
 		int top = ReaderScale(hwnd, 17);
 		int bottom = ReaderScale(hwnd, 41);
-		MoveToEx(dc, g_readerSeparator1, top, NULL);
-		LineTo(dc, g_readerSeparator1, bottom);
-		MoveToEx(dc, g_readerSeparator2, top, NULL);
-		LineTo(dc, g_readerSeparator2, bottom);
-		MoveToEx(dc, 0, ReaderScale(hwnd, READER_TOOLBAR_HEIGHT) - 1, NULL);
-		LineTo(dc, paint.rcPaint.right,
-			ReaderScale(hwnd, READER_TOOLBAR_HEIGHT) - 1);
+		if (g_readerBackgroundMode != READER_BACKGROUND_TRANSPARENT) {
+			MoveToEx(dc, g_readerSeparator1, top, NULL);
+			LineTo(dc, g_readerSeparator1, bottom);
+			MoveToEx(dc, g_readerSeparator2, top, NULL);
+			LineTo(dc, g_readerSeparator2, bottom);
+			MoveToEx(dc, 0, ReaderScale(hwnd, READER_TOOLBAR_HEIGHT) - 1, NULL);
+			LineTo(dc, paint.rcPaint.right,
+				ReaderScale(hwnd, READER_TOOLBAR_HEIGHT) - 1);
+		}
 		SelectObject(dc, oldPen);
 		DeleteObject(pen);
 		EndPaint(hwnd, &paint);
@@ -1283,11 +1598,15 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 
 	case WM_CTLCOLORSTATIC:
 		SetBkMode((HDC)wParam, TRANSPARENT);
-		SetBkColor((HDC)wParam, g_readerTheme.headerBackground);
+		SetBkColor((HDC)wParam,
+			g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT
+				? READER_TRANSPARENT_KEY : g_readerTheme.headerBackground);
 		SetTextColor((HDC)wParam,
 			((HWND)lParam == g_readerStatus ||
 			 (HWND)lParam == g_readerFontSizeLabel)
-				? g_readerTheme.text : g_readerTheme.mutedText);
+				? ReaderInformationTextColor()
+				: (g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT
+					? ReaderInformationTextColor() : g_readerTheme.mutedText));
 		return (LRESULT)g_readerToolbarBrush;
 
 	case WM_CTLCOLORLISTBOX:
@@ -1335,7 +1654,12 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 		if (g_readerPinButton != NULL) {
 			InvalidateRect(g_readerPinButton, NULL, FALSE);
 		}
+		PositionReaderHitLayer();
 		break;
+
+	case WM_SHOWWINDOW:
+		PositionReaderHitLayer();
+		return 0;
 
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
@@ -1363,14 +1687,45 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 				ApplyReaderOpacity(ReaderOpacityFromCombo());
 			}
 			return 0;
+		case IDC_READER_BACKGROUND:
+			if (HIWORD(wParam) == CBN_SELCHANGE) {
+				ApplyReaderBackgroundMode(ReaderBackgroundFromCombo());
+			}
+			return 0;
 		case IDC_READER_PIN:
 			ToggleReaderTopmost();
+			return 0;
+		case IDM_READER_BACKGROUND_WHITE:
+			ApplyReaderBackgroundMode(READER_BACKGROUND_WHITE);
+			return 0;
+		case IDM_READER_BACKGROUND_TRANSPARENT:
+			ApplyReaderBackgroundMode(READER_BACKGROUND_TRANSPARENT);
 			return 0;
 		}
 		if (LOWORD(wParam) >= IDM_READER_OPACITY_BASE + 10 &&
 			LOWORD(wParam) <= IDM_READER_OPACITY_BASE + 100) {
 			ApplyReaderOpacity((int)(LOWORD(wParam) - IDM_READER_OPACITY_BASE));
 			SelectReaderOpacityCombo(g_readerOpacityPercent);
+			return 0;
+		}
+		break;
+
+	case WM_ACTIVATE:
+		if (LOWORD(wParam) != WA_INACTIVE) {
+			SyncReaderOpacityFromWindow();
+			if (g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT) {
+				UpdateTransparentTextColor();
+			}
+		}
+		break;
+
+	case WM_MOUSEWHEEL:
+		if (GetKeyState(VK_CONTROL) < 0) {
+			int change = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 10 : -10;
+			int percent = max(10, min(100, g_readerOpacityPercent + change));
+			ApplyReaderOpacity(percent);
+			SelectReaderOpacityCombo(percent);
+			SyncReaderOpacityFromWindow();
 			return 0;
 		}
 		break;
@@ -1391,7 +1746,21 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 		DestroyWindow(hwnd);
 		return 0;
 
+	case WM_TIMER:
+		if (wParam == TIMER_READER_SYNC) {
+			SyncReaderOpacityFromWindow();
+			if (g_readerBackgroundMode == READER_BACKGROUND_TRANSPARENT) {
+				UpdateTransparentTextColor();
+			}
+			return 0;
+		}
+		break;
+
 	case WM_DESTROY:
+		KillTimer(hwnd, TIMER_READER_SYNC);
+		if (g_readerHitLayer != NULL && IsWindow(g_readerHitLayer)) {
+			DestroyWindow(g_readerHitLayer);
+		}
 		if (g_readerEdit != NULL) {
 			RemoveWindowSubclass(g_readerEdit, ReaderEditSubclassProc, 1);
 		}
@@ -1418,6 +1787,8 @@ static LRESULT CALLBACK TextReaderWndProc(HWND hwnd, UINT message, WPARAM wParam
 		g_readerFontPlusButton = NULL;
 		g_readerFontSizeLabel = NULL;
 		g_readerOpacityCombo = NULL;
+		g_readerBackgroundCombo = NULL;
+		g_readerHitLayer = NULL;
 		g_readerPinButton = NULL;
 		g_readerStatus = NULL;
 		g_readerWordInfo = NULL;
@@ -1461,6 +1832,21 @@ BOOL InitializeTextReader(HINSTANCE instance) {
 		return FALSE;
 	}
 	g_readerInstance = instance;
+	if (!g_readerHitClassRegistered) {
+		memset(&windowClass, 0, sizeof(windowClass));
+		windowClass.cbSize = sizeof(windowClass);
+		windowClass.style = CS_HREDRAW | CS_VREDRAW;
+		windowClass.lpfnWndProc = ReaderHitLayerProc;
+		windowClass.hInstance = instance;
+		windowClass.hCursor = LoadCursorW(NULL, IDC_IBEAM);
+		windowClass.lpszClassName = READER_HIT_CLASS_NAME;
+		if (!RegisterClassExW(&windowClass)) {
+			FreeLibrary(g_richEditLibrary);
+			g_richEditLibrary = NULL;
+			return FALSE;
+		}
+		g_readerHitClassRegistered = TRUE;
+	}
 	memset(&windowClass, 0, sizeof(windowClass));
 	windowClass.cbSize = sizeof(windowClass);
 	windowClass.style = CS_HREDRAW | CS_VREDRAW;
@@ -1489,6 +1875,10 @@ void CleanupTextReader(void) {
 	if (g_readerClassRegistered) {
 		UnregisterClassW(READER_CLASS_NAME, g_readerInstance);
 		g_readerClassRegistered = FALSE;
+	}
+	if (g_readerHitClassRegistered) {
+		UnregisterClassW(READER_HIT_CLASS_NAME, g_readerInstance);
+		g_readerHitClassRegistered = FALSE;
 	}
 }
 

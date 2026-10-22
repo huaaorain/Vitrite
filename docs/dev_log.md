@@ -1,5 +1,25 @@
 # Development Log
 
+## 2026-10-22: Transparent Interaction and Opacity Controls
+
+### Changes
+*   Corrected the 90% global opacity target.
+*   Added Ctrl+wheel opacity adjustment in ten-percent steps.
+*   Added a clickable, nearly invisible hit layer for color-key transparent reading surfaces.
+*   Forwarded clicks, dragging, context menus, and wheel input from the hit layer to RichEdit.
+*   Increased wheel scrolling to three lines per notch.
+*   Preserved color-key flags during opacity animations.
+
+## 2026-10-22: White Reader and Transparent Surface
+
+### Changes
+*   Added periodic opacity reconciliation so global shortcut changes appear in the reader selector.
+*   Preserved layered color keys during shared opacity animations.
+*   Unified normal surfaces around white and removed the purple action accent.
+*   Added white/transparent reader backgrounds with persistent configuration.
+*   Added background luminance sampling and automatic black/white text in transparent mode.
+*   Removed the RichEdit client border and request a borderless DWM frame where supported.
+
 ## 2026-10-22: Reader UI Redesign
 
 ### Design

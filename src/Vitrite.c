@@ -41,7 +41,7 @@ HWND  g_hMenuTargetWnd;
 HWND  g_hMainWnd;
 HWND  g_hSettingsWnd;
 
-#define BRAND_COLOR RGB(170, 153, 255)
+#define BRAND_COLOR RGB(52, 52, 52)
 #define SUBTITLE_COLOR RGB(110, 110, 120)
 #define SETTINGS_INI_NAME TEXT("vitrite.ini")
 #define HOTKEY_MODIFIERS_DEFAULT (MOD_CONTROL | MOD_SHIFT)
@@ -371,6 +371,9 @@ static BYTE GetCurrentWindowAlpha(HWND hWnd) {
 static void TickOpacityAnimation(void) {
 	LONG_PTR exStyle;
 	BYTE alpha;
+	COLORREF colorKey;
+	BYTE previousAlpha;
+	DWORD layeredFlags;
 	int alphaInt;
 	int step;
 	int steps;
@@ -405,7 +408,14 @@ static void TickOpacityAnimation(void) {
 	alpha = (BYTE)alphaInt;
 	exStyle = GetWindowLongPtr(g_animTargetWnd, GWL_EXSTYLE);
 	SetWindowLongPtr(g_animTargetWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-	SetLayeredWindowAttributes(g_animTargetWnd, 0, alpha, LWA_ALPHA);
+	colorKey = 0;
+	previousAlpha = 255;
+	layeredFlags = 0;
+	GetLayeredWindowAttributes(g_animTargetWnd, &colorKey,
+		&previousAlpha, &layeredFlags);
+	SetLayeredWindowAttributes(g_animTargetWnd,
+		(layeredFlags & LWA_COLORKEY) ? colorKey : 0, alpha,
+		LWA_ALPHA | ((layeredFlags & LWA_COLORKEY) ? LWA_COLORKEY : 0));
 
 	g_animStep++;
 	if (g_animStep > g_animSteps) {
@@ -635,7 +645,7 @@ static void ApplyTransparencyToWindow(HWND hOurWnd, HWND hTargetWindow, int iTen
 		if (state == NULL) {
 			return;
 		}
-		targetAlpha = (iTenths == 9) ? 255 : (BYTE)((iTenths * 255) / 10);
+		targetAlpha = (BYTE)((iTenths * 255) / 10);
 		BeginOpacityAnimation(hOurWnd, hTargetWindow, targetAlpha);
 	} else {
 		BeginResetAnimation(hOurWnd, hTargetWindow);
@@ -1166,7 +1176,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	InitializeLibrary(hInstance);
 	LoadSettings();
 	g_brandBrush = CreateSolidBrush(BRAND_COLOR);
-	g_settingsBackgroundBrush = CreateSolidBrush(RGB(248, 247, 252));
+	g_settingsBackgroundBrush = CreateSolidBrush(RGB(255, 255, 255));
 
 	g_uTaskbarRestart = RegisterWindowMessage(TEXT("TaskbarCreated"));
 

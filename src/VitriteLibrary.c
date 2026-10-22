@@ -39,14 +39,14 @@
 #define IDM_LIBRARY_TOGGLE_FAVORITE 902
 #define IDM_LIBRARY_REMOVE_BOOK 903
 
-#define LIBRARY_BG_COLOR RGB(246, 243, 237)
-#define LIBRARY_TOOLBAR_COLOR RGB(238, 234, 225)
-#define LIBRARY_CARD_COLOR RGB(255, 253, 247)
-#define LIBRARY_TEXT_COLOR RGB(42, 40, 37)
-#define LIBRARY_SUBTLE_COLOR RGB(108, 101, 91)
-#define LIBRARY_ACCENT_COLOR RGB(156, 126, 232)
+#define LIBRARY_BG_COLOR RGB(255, 255, 255)
+#define LIBRARY_TOOLBAR_COLOR RGB(255, 255, 255)
+#define LIBRARY_CARD_COLOR RGB(255, 255, 255)
+#define LIBRARY_TEXT_COLOR RGB(29, 29, 29)
+#define LIBRARY_SUBTLE_COLOR RGB(109, 109, 109)
+#define LIBRARY_ACCENT_COLOR RGB(54, 54, 54)
 #define LIBRARY_STAR_COLOR RGB(222, 159, 36)
-#define LIBRARY_BORDER_COLOR RGB(222, 216, 204)
+#define LIBRARY_BORDER_COLOR RGB(226, 226, 226)
 
 typedef struct LIBRARY_BOOK {
 	WCHAR relativePath[MAX_PATH];
@@ -593,9 +593,9 @@ static void DrawFavoriteStar(HDC dc, const RECT* rect, BOOL favorite) {
 		points[i].y = centerY + outerUnit[i][1] * scale / 100;
 	}
 	brush = CreateSolidBrush(favorite ? LIBRARY_STAR_COLOR :
-		RGB(255, 253, 247));
+		RGB(255, 255, 255));
 	pen = CreatePen(PS_SOLID, 2, favorite ? LIBRARY_STAR_COLOR :
-		RGB(128, 119, 104));
+		RGB(128, 128, 128));
 	if (brush != NULL && pen != NULL) {
 		SelectObject(dc, brush);
 		SelectObject(dc, pen);
@@ -729,7 +729,7 @@ static void PaintBookView(HWND hwnd) {
 		}
 		favorite = g_books[bookIndex].favorite;
 		cardBrush = CreateSolidBrush(i == g_libraryHoverBook
-			? RGB(255, 250, 236) : LIBRARY_CARD_COLOR);
+			? RGB(247, 247, 247) : LIBRARY_CARD_COLOR);
 		borderColor = favorite ? LIBRARY_STAR_COLOR : LIBRARY_BORDER_COLOR;
 		borderPen = CreatePen(PS_SOLID, favorite ? 2 : 1, borderColor);
 		oldBrush = (HBRUSH)SelectObject(bufferDc, cardBrush);

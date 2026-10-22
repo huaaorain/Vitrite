@@ -43,18 +43,6 @@ static BOOL IsHighContrastEnabled(void) {
 		(contrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
 }
 
-static BOOL IsDarkAppModeEnabled(void) {
-	DWORD value = 1;
-	DWORD size = sizeof(value);
-	if (RegGetValueW(HKEY_CURRENT_USER,
-			L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-			L"AppsUseLightTheme", RRF_RT_REG_DWORD, NULL, &value, &size) !=
-			ERROR_SUCCESS) {
-		return FALSE;
-	}
-	return value == 0;
-}
-
 void GetVitriteUiTheme(HWND window, VITRITE_UI_THEME* theme) {
 	WCHAR override[32];
 	(void)window;
@@ -86,42 +74,41 @@ void GetVitriteUiTheme(HWND window, VITRITE_UI_THEME* theme) {
 		theme->focus = GetSysColor(COLOR_HIGHLIGHT);
 		return;
 	}
-	theme->dark = lstrcmpiW(override, L"dark") == 0 ||
-		(lstrcmpiW(override, L"light") != 0 && IsDarkAppModeEnabled());
+	theme->dark = lstrcmpiW(override, L"dark") == 0;
 	if (theme->dark) {
-		theme->windowBackground = RGB(29, 28, 26);
-		theme->headerBackground = RGB(36, 35, 31);
-		theme->surfaceBackground = RGB(24, 23, 21);
-		theme->text = RGB(240, 236, 229);
-		theme->mutedText = RGB(170, 163, 154);
-		theme->accent = RGB(184, 158, 255);
-		theme->accentHover = RGB(198, 176, 255);
-		theme->accentText = RGB(33, 22, 47);
-		theme->button = RGB(48, 46, 42);
-		theme->buttonHover = RGB(59, 56, 50);
-		theme->buttonPressed = RGB(69, 65, 58);
-		theme->border = RGB(75, 71, 64);
-		theme->separator = RGB(65, 62, 56);
-		theme->selectionBackground = RGB(91, 69, 148);
+		theme->windowBackground = RGB(30, 30, 30);
+		theme->headerBackground = RGB(36, 36, 36);
+		theme->surfaceBackground = RGB(26, 26, 26);
+		theme->text = RGB(242, 242, 242);
+		theme->mutedText = RGB(174, 174, 174);
+		theme->accent = RGB(236, 236, 236);
+		theme->accentHover = RGB(255, 255, 255);
+		theme->accentText = RGB(20, 20, 20);
+		theme->button = RGB(45, 45, 45);
+		theme->buttonHover = RGB(58, 58, 58);
+		theme->buttonPressed = RGB(69, 69, 69);
+		theme->border = RGB(73, 73, 73);
+		theme->separator = RGB(62, 62, 62);
+		theme->selectionBackground = GetSysColor(COLOR_HIGHLIGHT);
 		theme->selectionText = RGB(255, 255, 255);
-		theme->focus = RGB(198, 176, 255);
+		theme->focus = RGB(255, 255, 255);
 	} else {
-		theme->windowBackground = RGB(244, 241, 235);
-		theme->headerBackground = RGB(251, 249, 244);
-		theme->surfaceBackground = RGB(255, 253, 248);
-		theme->text = RGB(41, 39, 34);
-		theme->mutedText = RGB(108, 102, 93);
-		theme->accent = RGB(115, 88, 185);
-		theme->accentHover = RGB(99, 74, 164);
-		theme->accentText = RGB(255, 255, 255);
-		theme->button = RGB(241, 236, 227);
-		theme->buttonHover = RGB(232, 224, 212);
-		theme->buttonPressed = RGB(221, 212, 198);
-		theme->border = RGB(216, 208, 195);
-		theme->separator = RGB(222, 215, 203);
-		theme->selectionBackground = RGB(204, 189, 240);
-		theme->selectionText = RGB(37, 28, 54);
-		theme->focus = RGB(115, 88, 185);
+		theme->windowBackground = RGB(255, 255, 255);
+		theme->headerBackground = RGB(255, 255, 255);
+		theme->surfaceBackground = RGB(255, 255, 255);
+		theme->text = RGB(29, 29, 29);
+		theme->mutedText = RGB(109, 109, 109);
+		theme->accent = RGB(242, 242, 242);
+		theme->accentHover = RGB(233, 233, 233);
+		theme->accentText = RGB(22, 22, 22);
+		theme->button = RGB(255, 255, 255);
+		theme->buttonHover = RGB(243, 243, 243);
+		theme->buttonPressed = RGB(232, 232, 232);
+		theme->border = RGB(224, 224, 224);
+		theme->separator = RGB(236, 236, 236);
+		theme->selectionBackground = GetSysColor(COLOR_HIGHLIGHT);
+		theme->selectionText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+		theme->focus = GetSysColor(COLOR_HIGHLIGHT);
 	}
 }
 
@@ -170,8 +157,10 @@ void ApplyRoundedWindowCorners(HWND window) {
 
 	if (setWindowAttribute != NULL && IsWindows11OrGreater()) {
 		int preference = DWMWCP_ROUND_VITRITE;
+		COLORREF noBorder = 0xFFFFFFFE;
 		setWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE_VITRITE,
 			&preference, sizeof(preference));
+		setWindowAttribute(window, 34, &noBorder, sizeof(noBorder));
 	}
 
 	if (IsZoomed(window)) {

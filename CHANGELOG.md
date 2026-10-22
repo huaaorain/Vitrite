@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0 - 2026-10-22
+
+### Fixed
+
+- Fixed `Ctrl+Shift+9` applying 100% instead of the documented 90% opacity.
+- Added `Ctrl+mouse wheel` opacity adjustment in 10% steps.
+- Added a nearly invisible mouse-hit layer for transparent reader backgrounds so clicks, text selection, context menus, and wheel input no longer fall through to the window behind.
+- Forwarded transparent-surface wheel input to RichEdit and increased reader wheel scrolling to three lines per notch.
+- Preserved transparent color-key state while global opacity animation is running.
+
+## 0.3.1 - 2026-10-22
+
+### Fixed
+
+- Synchronized the reader opacity selector with global shortcut and animation changes.
+- Removed the purple action accent and unified normal reader, bookshelf, and settings surfaces around white.
+- Added white and transparent reader background modes.
+- Added automatic black/white reading text selection based on the desktop background luminance in transparent mode.
+- Preserved color-key transparency while the shared opacity animation is running.
+- Removed the reader's sunken client border and suppressed the Windows 11 window border where supported.
+
 ## 0.3.0 - 2026-10-22
 
 ### Changed
